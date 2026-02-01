@@ -1,0 +1,14 @@
+{
+  "configurations": [
+    {
+      "type": "java",
+      "name": "Spring Boot-StepupshoesApplication<stepupshoes>",
+      "request": "launch",
+      "cwd": "${workspaceFolder}",
+      "mainClass": "stepup.shoes.StepupshoesApplication",
+      "projectName": "stepupshoes",
+      "args": "",
+      "envFile": "${workspaceFolder}/.env"
+    }
+  ]
+}

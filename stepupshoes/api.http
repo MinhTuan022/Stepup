@@ -1,0 +1,134 @@
+GET http://localhost:8080/api/v1/danh-muc HTTP/1.1
+###
+GET http://localhost:8080/api/v1/san-pham HTTP/1.1
+###
+POST http://localhost:8080/api/v1/san-pham HTTP/1.1
+content-type: application/json
+Authorization: Bearer eyJhbGciOiJIUzUxMiJ9.eyJzdWIiOiJhZG1pbl91c2VyIiwidXNlcklkIjo3LCJpYXQiOjE3Njg0ODM3NzEsImV4cCI6MTc2ODU3MDE3MX0.FYbi_Nh5SbvzibGKiesM0nPBl3qqfY4PWlMig2kAY-T9ol2LTUUBAzvq3jS-zhFt6D5of0ibduDp-QAXSG1zuA
+
+# public class SanPhamDTO {
+#     private Integer maSanPham;
+#     private String tenSanPham;
+#     private String moTa;
+#     private String thuongHieu;
+#     private Integer maDanhMuc;
+#     private String tenDanhMuc;
+#     private BigDecimal giaCoBan;
+#     private Boolean trangThai;
+#     private LocalDateTime ngayTao;
+#     private LocalDateTime ngayCapNhat;
+#     private List<ChiTietSanPhamDTO> chiTietSanPhams;
+# }
+{
+    "tenSanPham": "Giày Thể Thao Mới",
+    "moTa": "Giày thể thao chất lượng cao, phù hợp cho mọi hoạt động.",
+    "thuongHieu": "StepUp",
+    "maDanhMuc": 2,
+    "giaCoBan": 1200000,
+    "trangThai": true
+}
+
+###
+
+
+GET http://localhost:8080/api/v1/san-pham HTTP/1.1
+
+###
+
+POST https://example.com/comments HTTP/1.1
+content-type: application/json
+
+{
+    "name": "sample",
+    "time": "Wed, 21 Oct 2015 18:27:50 GMT"
+}
+
+
+
+###
+POST http://localhost:8080/api/v1/auth/register HTTP/1.1
+content-type: application/json
+
+{
+    "tenDangNhap": "admin2",
+    "matKhau": "123456",
+    "email": "admin2@example.com",
+    "hoTen": "Nguyen Van A",
+    "soDienThoai": "0123456789",
+    "diaChi": "123 Le Loi, Quan 1, TP.HCM",
+    "vaiTro": "quan_tri"
+}
+
+###
+POST http://localhost:8080/api/v1/auth/login HTTP/1.1
+content-type: application/json
+
+{
+    "tenDangNhap": "user5",
+    "matKhau": "password123"
+}
+
+###
+POST http://localhost:8080/api/v1/auth/register HTTP/1.1
+content-type: application/json
+
+{
+    "tenDangNhap": "admin_user",
+    "matKhau": "admin123456",
+    "email": "admin@example.com",
+    "hoTen": "Admin User",
+    "soDienThoai": "0987654321",
+    "diaChi": "456 Nguyen Hue, Quan 1, TP.HCM",
+    "vaiTro": "admin"
+}
+
+###
+POST http://localhost:8080/api/v1/auth/login HTTP/1.1
+content-type: application/json
+
+{
+    "tenDangNhap": "admin_user",
+    "matKhau": "admin123456"
+}
+
+###
+POST http://localhost:8080/api/v1/danh-muc HTTP/1.1
+content-type: application/json
+Authorization: Bearer eyJhbGciOiJIUzUxMiJ9.eyJzdWIiOiJhZG1pbl91c2VyIiwidXNlcklkIjo3LCJpYXQiOjE3Njg0ODM3NzEsImV4cCI6MTc2ODU3MDE3MX0.FYbi_Nh5SbvzibGKiesM0nPBl3qqfY4PWlMig2kAY-T9ol2LTUUBAzvq3jS-zhFt6D5of0ibduDp-QAXSG1zuA
+
+{
+    "tenDanhMuc": "Giày Nam",
+    "moTa": "Danh mục giày dành cho nam giới"
+}
+
+###
+POST http://localhost:8080/api/v1/danh-muc HTTP/1.1
+content-type: application/json
+Authorization: Bearer eyJhbGciOiJIUzUxMiJ9.eyJzdWIiOiJhZG1pbl91c2VyIiwidXNlcklkIjo3LCJpYXQiOjE3Njg0ODM3NzEsImV4cCI6MTc2ODU3MDE3MX0.FYbi_Nh5SbvzibGKiesM0nPBl3qqfY4PWlMig2kAY-T9ol2LTUUBAzvq3jS-zhFt6D5of0ibduDp-QAXSG1zuA
+
+{
+    "tenDanhMuc": "Giày Thể Thao Nam",
+    "moTa": "Giày thể thao cho nam giới",
+    "maDanhMucCha": 1
+}
+
+###
+POST http://localhost:8080/api/v1/danh-muc HTTP/1.1
+content-type: application/json
+Authorization: Bearer eyJhbGciOiJIUzUxMiJ9.eyJzdWIiOiJhZG1pbl91c2VyIiwidXNlcklkIjo3LCJpYXQiOjE3Njg0ODM3NzEsImV4cCI6MTc2ODU3MDE3MX0.FYbi_Nh5SbvzibGKiesM0nPBl3qqfY4PWlMig2kAY-T9ol2LTUUBAzvq3jS-zhFt6D5of0ibduDp-QAXSG1zuA
+
+{
+    "tenDanhMuc": "Giày Nữ",
+    "moTa": "Danh mục giày dành cho nữ giới"
+}
+
+###
+POST http://localhost:8080/api/v1/danh-muc HTTP/1.1
+content-type: application/json
+Authorization: Bearer eyJhbGciOiJIUzUxMiJ9.eyJzdWIiOiJhZG1pbl91c2VyIiwidXNlcklkIjo3LCJpYXQiOjE3Njg0ODM3NzEsImV4cCI6MTc2ODU3MDE3MX0.FYbi_Nh5SbvzibGKiesM0nPBl3qqfY4PWlMig2kAY-T9ol2LTUUBAzvq3jS-zhFt6D5of0ibduDp-QAXSG1zuA
+
+{
+    "tenDanhMuc": "Giày Thể Thao Nữ",
+    "moTa": "Giày thể thao cho nữ giới",
+    "maDanhMucCha": 3
+}
