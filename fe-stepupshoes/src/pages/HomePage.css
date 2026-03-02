@@ -1,4 +1,3 @@
-/* HomePage.css */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
 
 :root {
@@ -15,7 +14,7 @@
   --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
   --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1);
   --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1);
-  --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1);
+  --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.8);
   --radius-sm: 0.375rem;
   --radius-md: 0.5rem;
   --radius-lg: 0.75rem;
@@ -517,6 +516,10 @@ body {
   margin-bottom: 3rem;
 }
 
+.section-header-content {
+  margin-bottom: 1rem;
+}
+
 .section-title {
   font-size: 2.5rem;
   font-weight: 700;
@@ -527,6 +530,80 @@ body {
 .section-subtitle {
   font-size: 1.125rem;
   color: var(--text-secondary);
+}
+
+/* Active Filters */
+.active-filters {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 20px;
+  padding: 16px;
+  background: linear-gradient(135deg, rgba(255, 107, 53, 0.05) 0%, rgba(255, 140, 97, 0.05) 100%);
+  border-radius: 12px;
+  max-width: 800px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.filter-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: white;
+  border: 2px solid rgba(255, 107, 53, 0.3);
+  border-radius: 20px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: #ff6b35;
+  box-shadow: 0 2px 8px rgba(255, 107, 53, 0.15);
+}
+
+.filter-badge svg {
+  flex-shrink: 0;
+}
+
+.remove-filter {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: none;
+  background: rgba(255, 107, 53, 0.1);
+  border-radius: 50%;
+  color: #ff6b35;
+  cursor: pointer;
+  font-size: 0.8rem;
+  transition: all 0.2s ease;
+  margin-left: 4px;
+}
+
+.remove-filter:hover {
+  background: #ff6b35;
+  color: white;
+  transform: rotate(90deg);
+}
+
+.clear-all-filters {
+  padding: 8px 16px;
+  border: 2px solid #e5e7eb;
+  background: white;
+  border-radius: 20px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #666;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.clear-all-filters:hover {
+  border-color: #ef4444;
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.05);
 }
 
 /* ========== Categories Section ========== */
@@ -633,6 +710,16 @@ body {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
   gap: 2rem;
+}
+
+/* Card link wrapper */
+.product-card-link {
+  display: block;
+  transition: box-shadow 0.2s, transform 0.2s;
+}
+.product-card-link:hover .product-card {
+  box-shadow: 0 8px 32px rgba(255,126,95,0.15);
+  transform: translateY(-4px) scale(1.02);
 }
 
 .product-card {

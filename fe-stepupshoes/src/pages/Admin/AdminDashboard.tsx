@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import "./AdminDashboard.css";
 import { useAuth } from "../../context/AuthContext";
 import StatisticsTab from "./StatisticsTab";
@@ -21,11 +21,28 @@ type TabType =
   | "products";
 
 const AdminDashboard = () => {
-  const [activeTab, setActiveTab] = useState<TabType>("products");
   const { user, logout } = useAuth();
+  const isAdmin = user?.vaiTro === 'quan_tri';
+  const isEmployee = user?.vaiTro === 'nhan_vien';
+
+  const [activeTab, setActiveTab] = useState<TabType>(isEmployee ? "counter-order" : "products");
+
+  useEffect(() => {
+    if (isEmployee && !["counter-order", "orders", "products"].includes(activeTab)) {
+      setActiveTab("counter-order");
+    }
+  }, [user?.vaiTro, activeTab, isEmployee]);
 
   const handleLogout = () => {
     logout();
+  };
+
+  const hasAccessToTab = (tab: TabType): boolean => {
+    if (isAdmin) return true; 
+    if (isEmployee) {
+      return ["counter-order", "orders", "products"].includes(tab);
+    }
+    return false;
   };
 
   const renderTabContent = () => {
@@ -55,9 +72,12 @@ const AdminDashboard = () => {
     <div className="admin-dashboard">
       <header className="admin-header">
         <div className="admin-header-top">
-          <h1>Admin Dashboard</h1>
+          <h1>{isAdmin ? 'Admin Dashboard' : 'Bán hàng'}</h1>
           <div className="admin-user-info">
             <span className="user-name">{user?.tenDangNhap}</span>
+            <span className="user-role-badge">
+              {isAdmin ? 'Quản trị viên' : 'Nhân viên'}
+            </span>
             <button onClick={handleLogout} className="logout-btn">
               Đăng xuất
             </button>
@@ -68,70 +88,86 @@ const AdminDashboard = () => {
       <div className="admin-container">
         <nav className="admin-sidebar">
           <ul className="nav-menu">
-            <li>
-              <button
-                className={`nav-btn ${activeTab === "products" ? "active" : ""}`}
-                onClick={() => setActiveTab("products")}
-              >
-                Quản lý sản phẩm
-              </button>
-            </li>
-            {/* <li>
-              <button
-                className={`nav-btn ${activeTab === "statistics" ? "active" : ""}`}
-                onClick={() => setActiveTab("statistics")}
-              >
-                Thống kê
-              </button>
-            </li> */}
-            <li>
-              <button
-                className={`nav-btn ${activeTab === "users" ? "active" : ""}`}
-                onClick={() => setActiveTab("users")}
-              >
-                Quản lý người dùng
-              </button>
-            </li>
-            {/* <li>
-              <button
-                className={`nav-btn ${activeTab === "orders" ? "active" : ""}`}
-                onClick={() => setActiveTab("orders")}
-              >
-                Quản lý đơn hàng
-              </button>
-            </li> */}
-            {/* <li>
-              <button
-                className={`nav-btn ${activeTab === "counter-order" ? "active" : ""}`}
-                onClick={() => setActiveTab("counter-order")}
-              >
-                Đơn hàng tại quầy
-              </button>
-            </li> */}
-            <li>
-              <button
-                className={`nav-btn ${activeTab === "danhmuc" ? "active" : ""}`}
-                onClick={() => setActiveTab("danhmuc")}
-              >
-                Quản lý danh mục
-              </button>
-            </li>
-            {/* <li>
-              <button
-                className={`nav-btn ${activeTab === "vouchers" ? "active" : ""}`}
-                onClick={() => setActiveTab("vouchers")}
-              >
-                Quản lý voucher
-              </button>
-            </li>
-            <li>
-              <button
-                className={`nav-btn ${activeTab === "reviews" ? "active" : ""}`}
-                onClick={() => setActiveTab("reviews")}
-              >
-                Quản lý đánh giá
-              </button>
-            </li> */}
+            {hasAccessToTab("products") && (
+              <li>
+                <button
+                  className={`nav-btn ${activeTab === "products" ? "active" : ""}`}
+                  onClick={() => setActiveTab("products")}
+                >
+                  Quản lý sản phẩm
+                </button>
+              </li>
+            )}
+            {hasAccessToTab("counter-order") && (
+              <li>
+                <button
+                  className={`nav-btn ${activeTab === "counter-order" ? "active" : ""}`}
+                  onClick={() => setActiveTab("counter-order")}
+                >
+                  Đơn hàng tại quầy
+                </button>
+              </li>
+            )}
+            {hasAccessToTab("orders") && (
+              <li>
+                <button
+                  className={`nav-btn ${activeTab === "orders" ? "active" : ""}`}
+                  onClick={() => setActiveTab("orders")}
+                >
+                  Quản lý đơn hàng
+                </button>
+              </li>
+            )}
+            {hasAccessToTab("statistics") && (
+              <li>
+                <button
+                  className={`nav-btn ${activeTab === "statistics" ? "active" : ""}`}
+                  onClick={() => setActiveTab("statistics")}
+                >
+                  Thống kê
+                </button>
+              </li>
+            )}
+            {hasAccessToTab("users") && (
+              <li>
+                <button
+                  className={`nav-btn ${activeTab === "users" ? "active" : ""}`}
+                  onClick={() => setActiveTab("users")}
+                >
+                  Quản lý người dùng
+                </button>
+              </li>
+            )}
+            {hasAccessToTab("danhmuc") && (
+              <li>
+                <button
+                  className={`nav-btn ${activeTab === "danhmuc" ? "active" : ""}`}
+                  onClick={() => setActiveTab("danhmuc")}
+                >
+                  Quản lý danh mục
+                </button>
+              </li>
+            )}
+            {hasAccessToTab("vouchers") && (
+              <li>
+                <button
+                  className={`nav-btn ${activeTab === "vouchers" ? "active" : ""}`}
+                  onClick={() => setActiveTab("vouchers")}
+                >
+                  Quản lý voucher
+                </button>
+              </li>
+            )}
+            {/* {hasAccessToTab("reviews") && (
+              <li>
+                <button
+                  className={`nav-btn ${activeTab === "reviews" ? "active" : ""}`}
+                  onClick={() => setActiveTab("reviews")}
+                >
+                  Quản lý đánh giá
+                </button>
+              </li>
+            )} */}
           </ul>
         </nav>
 

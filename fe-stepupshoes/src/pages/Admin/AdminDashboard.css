@@ -41,6 +41,16 @@
   font-weight: 500;
 }
 
+.user-role-badge {
+  font-size: 12px;
+  padding: 4px 12px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+}
+
 .logout-btn {
   background-color: #ff4757;
   color: white;

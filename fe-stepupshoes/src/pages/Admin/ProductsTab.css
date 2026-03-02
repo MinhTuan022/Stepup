@@ -1,3 +1,95 @@
+/* ===== PREVIEW CARD ===== */
+.detail-preview {
+  margin-top: 24px;
+}
+.preview-card {
+  background: #f8f9ff;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(102,126,234,0.08);
+  padding: 18px 20px;
+  margin-top: 8px;
+  max-width: 100%;
+}
+.preview-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+.preview-sku {
+  font-weight: 700;
+  color: #667eea;
+  font-size: 15px;
+}
+.preview-status.active {
+  color: #27ae60;
+}
+.preview-status.inactive {
+  color: #95a5a6;
+}
+.preview-details-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.preview-item {
+  font-size: 14px;
+  color: #444;
+}
+.preview-label {
+  color: #888;
+  margin-right: 4px;
+}
+.preview-images-flex {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+.preview-image img {
+  width: 100px;
+  height: 100px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 2px solid #e0e0e0;
+  background: #fff;
+}
+.preview-sub-images {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.preview-sub-images-list {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.preview-sub-image {
+  width: 60px;
+  height: 60px;
+  object-fit: cover;
+  border-radius: 4px;
+  border: 1px solid #eee;
+  background: #fff;
+}
+@media (max-width: 600px) {
+  .preview-card {
+    padding: 10px 6px;
+  }
+  .preview-details-grid {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+  .preview-image img {
+    width: 70px;
+    height: 70px;
+  }
+  .preview-sub-image {
+    width: 40px;
+    height: 40px;
+  }
+}
 /* Nút thêm ảnh phụ */
 .add-image-btn {
   background: #e3f2fd;

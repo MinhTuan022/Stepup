@@ -1,3 +1,16 @@
+// ...existing code...
+export const orderService = {
+  createOrder: async (cart: any[]) => {
+    // Tùy backend, có thể cần truyền thêm thông tin địa chỉ, phương thức thanh toán...
+    const response = await fetch(`${API_BASE_URL}/v1/orders/create`, {
+      method: "POST",
+      headers: getHeaders(),
+      body: JSON.stringify({ items: cart }),
+    });
+    if (!response.ok) throw new Error("Lỗi khi tạo đơn hàng");
+    return await response.json();
+  },
+};
 import type { LoginRequest, JwtResponse, ApiResponse } from '../types'
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080/api'
@@ -15,6 +28,49 @@ const getHeaders = (): HeadersInit => {
 
 // Admin Services
 
+export const cartService = {
+  getCart: async (maNguoiDung: number) => {
+    const response = await fetch(`${API_BASE_URL}/v1/gio-hang/${maNguoiDung}`, {
+      headers: getHeaders(),
+    });
+    if (!response.ok) throw new Error('Lỗi khi tải giỏ hàng');
+    return await response.json();
+  },
+  addToCart: async (maNguoiDung: number, maChiTiet: number, soLuong: number) => {
+    const response = await fetch(`${API_BASE_URL}/v1/gio-hang/add?maNguoiDung=${maNguoiDung}&maChiTiet=${maChiTiet}&soLuong=${soLuong}`, {
+      method: 'POST',
+      headers: getHeaders(),
+    });
+    if (!response.ok) throw new Error('Lỗi khi thêm vào giỏ hàng');
+    return await response.json();
+  },
+  updateCartItem: async (maNguoiDung: number, maChiTiet: number, soLuong: number) => {
+    const response = await fetch(`${API_BASE_URL}/v1/gio-hang/update?maNguoiDung=${maNguoiDung}&maChiTiet=${maChiTiet}&soLuong=${soLuong}`, {
+      method: 'PUT',
+      headers: getHeaders(),
+    });
+    if (!response.ok) throw new Error('Lỗi khi cập nhật giỏ hàng');
+    return await response.json();
+  },
+  removeCartItem: async (maNguoiDung: number, maChiTiet: number) => {
+    const response = await fetch(`${API_BASE_URL}/v1/gio-hang/remove?maNguoiDung=${maNguoiDung}&maChiTiet=${maChiTiet}`, {
+      method: 'DELETE',
+      headers: getHeaders(),
+    });
+    if (!response.ok) throw new Error('Lỗi khi xóa sản phẩm khỏi giỏ hàng');
+    // API trả về ResponseEntity<Void> nên không có body
+    return true;
+  },
+  clearCart: async (maNguoiDung: number) => {
+    const response = await fetch(`${API_BASE_URL}/v1/gio-hang/clear/${maNguoiDung}`, {
+      method: 'DELETE',
+      headers: getHeaders(),
+    });
+    if (!response.ok) throw new Error('Lỗi khi xóa toàn bộ giỏ hàng');
+    // API trả về ResponseEntity<Void> nên không có body
+    return true;
+  },
+};
 export const authService = {
     register: async (userData: any) => {
       const response = await fetch(`${API_BASE_URL}/v1/auth/register`, {
@@ -67,6 +123,107 @@ export const authService = {
     return user ? JSON.parse(user) : null
   },
 }
+
+// User Services
+export const userService = {
+  getUserProfile: async (userId: number) => {
+    const response = await fetch(`${API_BASE_URL}/v1/users/${userId}/profile`, {
+      headers: getHeaders(),
+    });
+    if (!response.ok) throw new Error('Lỗi khi tải thông tin người dùng');
+    const data: ApiResponse<any> = await response.json();
+    return data.data;
+  },
+
+  updateUserProfile: async (userId: number, userData: any) => {
+    const response = await fetch(`${API_BASE_URL}/v1/users/${userId}/profile`, {
+      method: 'PUT',
+      headers: getHeaders(),
+      body: JSON.stringify(userData),
+    });
+    if (!response.ok) throw new Error('Lỗi khi cập nhật thông tin');
+    const data: ApiResponse<any> = await response.json();
+    return data.data;
+  },
+
+  changePassword: async (userId: number, oldPassword: string, newPassword: string) => {
+    const response = await fetch(`${API_BASE_URL}/v1/users/${userId}/change-password`, {
+      method: 'POST',
+      headers: getHeaders(),
+      body: JSON.stringify({ oldPassword, newPassword }),
+    });
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.message || 'Lỗi khi đổi mật khẩu');
+    }
+    const data: ApiResponse<string> = await response.json();
+    return data;
+  },
+
+  getUserOrders: async (userId: number, status?: string) => {
+    const url = status 
+      ? `${API_BASE_URL}/v1/users/${userId}/orders?status=${status}`
+      : `${API_BASE_URL}/v1/users/${userId}/orders`;
+    const response = await fetch(url, {
+      headers: getHeaders(),
+    });
+    if (!response.ok) throw new Error('Lỗi khi tải danh sách đơn hàng');
+    const data: ApiResponse<any[]> = await response.json();
+    return data.data;
+  },
+
+  getOrderDetail: async (userId: number, orderId: number) => {
+    const response = await fetch(`${API_BASE_URL}/v1/users/${userId}/orders/${orderId}`, {
+      headers: getHeaders(),
+    });
+    if (!response.ok) throw new Error('Lỗi khi tải chi tiết đơn hàng');
+    const data: ApiResponse<any> = await response.json();
+    return data.data;
+  },
+
+  getUserStats: async (userId: number) => {
+    const response = await fetch(`${API_BASE_URL}/v1/users/${userId}/stats`, {
+      headers: getHeaders(),
+    });
+    if (!response.ok) throw new Error('Lỗi khi tải thống kê');
+    const data: ApiResponse<any> = await response.json();
+    return data.data;
+  },
+
+  createOrder: async (userId: number, orderData: {
+    nguoiNhan: string;
+    soDienThoaiNhan: string;
+    diaChiGiaoHang: string;
+    ghiChu?: string;
+    maVoucher?: string;
+    items: Array<{ maChiTiet: number; soLuong: number }>;
+  }) => {
+    const response = await fetch(`${API_BASE_URL}/v1/users/${userId}/orders`, {
+      method: 'POST',
+      headers: getHeaders(),
+      body: JSON.stringify(orderData),
+    });
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.message || 'Lỗi khi tạo đơn hàng');
+    }
+    const data: ApiResponse<any> = await response.json();
+    return data.data;
+  },
+
+  validateVoucher: async (code: string, tongTien: number) => {
+    const response = await fetch(`${API_BASE_URL}/v1/users/validate-voucher`, {
+      method: 'POST',
+      headers: getHeaders(),
+      body: JSON.stringify({ code, tongTien }),
+    });
+    if (!response.ok) {
+      throw new Error('Lỗi khi kiểm tra voucher');
+    }
+    const data: ApiResponse<any> = await response.json();
+    return data.data;
+  },
+};
 
 // Admin Services
 export const adminService = {
@@ -209,6 +366,7 @@ export const adminService = {
     const url = new URL(`${API_BASE_URL}/v1/admin/orders`)
     url.searchParams.append('page', page.toString())
     url.searchParams.append('size', size.toString())
+    url.searchParams.append('sort', 'ngayDatHang,desc')
     if (status) url.searchParams.append('status', status)
 
     const response = await fetch(url.toString(), { headers: getHeaders() })
@@ -445,11 +603,12 @@ export const adminService = {
     return data.data;
   },
 
-  getProductById: async (id: number) => {
-    const response = await fetch(`${API_BASE_URL}/v1/san-pham/${id}`, {
+
+  getProductDetailsByProductId: async (maSanPham: number) => {
+    const response = await fetch(`${API_BASE_URL}/v1/chi-tiet-san-pham/san-pham/${maSanPham}`, {
       headers: getHeaders(),
     });
-    if (!response.ok) throw new Error('Không lấy được sản phẩm');
+    if (!response.ok) throw new Error('Không lấy được chi tiết sản phẩm');
     const data: ApiResponse<any> = await response.json();
     return data.data;
   },

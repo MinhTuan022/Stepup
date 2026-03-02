@@ -145,15 +145,15 @@ const ReviewsTab = () => {
                 {review.trangThai === 0 && (
                   <>
                     <button className="btn-approve" onClick={() => handleApprove(review.maDanhGia)}>
-                      ✓ Duyệt
+                      Duyệt
                     </button>
                     <button className="btn-reject" onClick={() => handleReject(review.maDanhGia)}>
-                      ✕ Từ chối
+                      Từ chối
                     </button>
                   </>
                 )}
                 <button className="btn-delete" onClick={() => handleDelete(review.maDanhGia)}>
-                  🗑️ Xóa
+                  Xóa
                 </button>
               </div>
             </div>

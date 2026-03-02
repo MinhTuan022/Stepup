@@ -1,843 +1,733 @@
-import { useState, useEffect } from 'react'
-import './CounterOrderTab.css'
+/**
+ * CounterOrderTab Component
+ * 
+ * Tạo và quản lý đơn hàng tại quầy (POS - Point of Sale).
+ * - Hỗ trợ cả khách hàng đã đăng ký và khách vãng lai
+ * - Chọn sản phẩm và số lượng
+ * - Áp dụng voucher giảm giá
+ * - CHỈ hỗ trợ thanh toán bằng tiền mặt tại quầy
+ * - Hoàn thành đơn hàng ngay sau khi thanh toán
+ */
+
+import React, { useState, useEffect } from 'react'
 import { adminService } from '../../services/api'
 import { useToast } from '../../context/ToastContext'
+import './CounterOrderTab.css'
 
 interface Product {
-  maChiTiet: number
+  maSanPham: number
   tenSanPham: string
-  donGia: number
+  thuongHieu: string
+  giaCoBan: number
+}
+
+interface ProductDetail {
+  maChiTiet: number
+  maSanPham: number
+  tenSanPham: string
+  mauSac: string
+  size: string
+  giaBan: number
   soLuongTon: number
-  kichCo?: string
-  mauSac?: string
+  hinhAnhChinh?: string
 }
 
 interface OrderItem {
   maChiTiet: number
   tenSanPham: string
-  donGia: number
+  mauSac: string
+  size: string
   soLuong: number
+  donGia: number
   thanhTien: number
+  soLuongTon: number
 }
 
 interface CounterOrder {
   maDonHang: number
-  maNguoiDung: number
-  nguoiNhan: string
-  soDienThoaiNhan: string
-  diaChiGiaoHang: string
-  loaiDonHang: string
-  trangThaiDonHang: string
-  trangThaiThanhToan: string
   tongTien: number
-  thanhTien: number
+  phiVanChuyen: number
   giamGia: number
-  chiTietDonHangs: OrderItem[]
+  thanhTien: number
 }
 
-interface User {
-  maNguoiDung: number
-  tenDangNhap: string
-  ten: string
-  email: string
-  soDienThoai: string
-}
-
-type PaymentMethod = 'tien_mat' | 'chuyen_khoan' | 'the_tin_dung' | 'vi_dien_tu'
-type CustomerType = 'registered' | 'guest'
-
-interface SelectedItem {
-  maChiTiet: number
-  tenSanPham: string
-  donGia: number
-  soLuong: number
-  kichCo?: string
-  mauSac?: string
-}
-
-const CounterOrderTab = () => {
-  const [step, setStep] = useState<'create' | 'manage' | 'finalize'>('create')
-  const [currentOrder, setCurrentOrder] = useState<CounterOrder | null>(null)
-  const [products, setProducts] = useState<Product[]>([])
-  const [users, setUsers] = useState<User[]>([])
-  const [loading, setLoading] = useState(false)
+const CounterOrderTab: React.FC = () => {
   const { showToast } = useToast()
-
-  // Form states for creating order
-  const [customerType, setCustomerType] = useState<CustomerType>('registered')
-  const [formData, setFormData] = useState({
-    maNguoiDung: 0,
-    nguoiNhan: '',
-    soDienThoaiNhan: '',
-    diaChiGiaoHang: 'Tại quầy',
-  })
-
-  // Form states for adding items during creation
-  const [selectedItems, setSelectedItems] = useState<SelectedItem[]>([])
+  
+  // State cho thông tin khách hàng
+  const [customerType, setCustomerType] = useState<'registered' | 'guest'>('guest')
+  const [maNguoiDung, setMaNguoiDung] = useState<number>(0)
+  const [nguoiNhan, setNguoiNhan] = useState('')
+  const [soDienThoaiNhan, setSoDienThoaiNhan] = useState('')
+  const [isSearchingCustomer, setIsSearchingCustomer] = useState(false)
+  
+  // State cho đơn hàng
+  const [currentOrder, setCurrentOrder] = useState<CounterOrder | null>(null)
+  const [orderItems, setOrderItems] = useState<OrderItem[]>([])
+  
+  // State cho sản phẩm
+  const [products, setProducts] = useState<Product[]>([])
+  const [productDetails, setProductDetails] = useState<ProductDetail[]>([])
   const [selectedProduct, setSelectedProduct] = useState<number | null>(null)
-  const [quantity, setQuantity] = useState(1)
-
-  // Form states for voucher
+  const [selectedDetail, setSelectedDetail] = useState<ProductDetail | null>(null)
+  const [selectedQuantity, setSelectedQuantity] = useState(1)
+  const [searchTerm, setSearchTerm] = useState('')
+  
+  // State cho voucher
   const [voucherCode, setVoucherCode] = useState('')
+  const [appliedVoucher, setAppliedVoucher] = useState(false)
+  
+  // State UI
+  const [isLoading, setIsLoading] = useState(false)
+  const [showProductModal, setShowProductModal] = useState(false)
 
-  // Form states for finalization
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('tien_mat')
-
+  // Load danh sách sản phẩm khi component mount
   useEffect(() => {
-    fetchProducts()
-    fetchUsers()
+    loadProducts()
   }, [])
 
-  const fetchProducts = async () => {
+  // Load chi tiết sản phẩm khi chọn sản phẩm
+  useEffect(() => {
+    if (selectedProduct) {
+      loadProductDetails(selectedProduct)
+    }
+  }, [selectedProduct])
+
+  const loadProducts = async () => {
     try {
       const data = await adminService.getProducts()
-      setProducts(data.content || data)
+      setProducts(data || [])
     } catch (error: any) {
-      showToast(error.message || 'Failed to fetch products', 'error')
+      showToast(error.message || 'Lỗi khi tải danh sách sản phẩm', 'error')
     }
   }
 
-  const fetchUsers = async () => {
+  const loadProductDetails = async (maSanPham: number) => {
     try {
-      const data = await adminService.getAllUsers(0, 100)
-      // Lọc chỉ lấy các người dùng không bị khóa
-      const activeUsers = (data.content || []).filter((u: any) => !u.trangThaiKhoa)
-      setUsers(activeUsers)
+      const data = await adminService.getProductDetailsByProductId(maSanPham)
+      setProductDetails(data || [])
     } catch (error: any) {
-      showToast(error.message || 'Failed to fetch users', 'error')
+      showToast(error.message || 'Lỗi khi tải chi tiết sản phẩm', 'error')
     }
   }
 
-  const handleCreateOrder = async (e: React.FormEvent) => {
-    e.preventDefault()
+  // Tìm kiếm khách hàng theo số điện thoại
+  const searchCustomerByPhone = async (phone: string) => {
+    if (!phone.trim() || phone.length < 10) return
+    
+    setIsSearchingCustomer(true)
+    try {
+      // Gọi API để tìm user theo số điện thoại
+      const response = await fetch(
+        `${import.meta.env.VITE_API_URL || 'http://localhost:8080/api'}/v1/admin/users/search-by-phone?phone=${phone}`,
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${localStorage.getItem('token')}`
+          }
+        }
+      )
+      
+      if (response.ok) {
+        const result = await response.json()
+        if (result.data) {
+          setMaNguoiDung(result.data.maNguoiDung)
+          setNguoiNhan(result.data.hoTen)
+          showToast('Đã tìm thấy khách hàng', 'success')
+        } else {
+          setMaNguoiDung(0)
+          showToast('Không tìm thấy khách hàng với số điện thoại này', 'info')
+        }
+      } else {
+        setMaNguoiDung(0)
+      }
+    } catch (error) {
+      setMaNguoiDung(0)
+      // Không hiển thị lỗi nếu không tìm thấy
+    } finally {
+      setIsSearchingCustomer(false)
+    }
+  }
 
-    if (!formData.nguoiNhan.trim()) {
-      showToast('Vui lòng nhập tên người nhận', 'error')
+  // Xử lý thay đổi số điện thoại cho khách đăng ký
+  const handlePhoneChange = (phone: string) => {
+    setSoDienThoaiNhan(phone)
+    
+    // Nếu là khách đã đăng ký, tự động tìm kiếm
+    if (customerType === 'registered' && phone.length === 10) {
+      searchCustomerByPhone(phone)
+    } else if (customerType === 'guest') {
+      setMaNguoiDung(0)
+    }
+  }
+
+  // Tạo đơn hàng mới
+  const handleCreateOrder = async () => {
+    if (!nguoiNhan.trim()) {
+      showToast('Vui lòng nhập tên khách hàng', 'error')
       return
     }
-
-    if (!formData.soDienThoaiNhan.trim()) {
+    if (!soDienThoaiNhan.trim()) {
       showToast('Vui lòng nhập số điện thoại', 'error')
       return
     }
 
-    // Kiểm tra nếu là khách hàng đã đăng ký
-    if (customerType === 'registered' && formData.maNguoiDung === 0) {
-      showToast('Vui lòng chọn khách hàng', 'error')
-      return
-    }
-
-    if (selectedItems.length === 0) {
-      showToast('Vui lòng thêm ít nhất 1 sản phẩm', 'error')
-      return
-    }
-
-    setLoading(true)
+    setIsLoading(true)
     try {
-      const orderData: any = {
-        nguoiNhan: formData.nguoiNhan.trim(),
-        soDienThoaiNhan: formData.soDienThoaiNhan.trim(),
-        diaChiGiaoHang: formData.diaChiGiaoHang || 'Tại quầy',
+      const orderData = {
+        maNguoiDung: customerType === 'registered' ? maNguoiDung : 0,
+        nguoiNhan: nguoiNhan,
+        soDienThoaiNhan: soDienThoaiNhan,
+        diaChiGiaoHang: 'Tại quầy'
       }
-
-      // Nếu là khách vãng lai, gửi maNguoiDung = 0
-      if (customerType === 'registered') {
-        orderData.maNguoiDung = formData.maNguoiDung
-      } else {
-        orderData.maNguoiDung = 0
-      }
-
-      // Tạo đơn hàng
-      const order = await adminService.createCounterOrder(orderData)
       
-      // Thêm tất cả sản phẩm đã chọn vào đơn hàng
-      let updatedOrder = order
-      for (const item of selectedItems) {
-        updatedOrder = await adminService.addItemToOrder(order.maDonHang, {
-          maChiTiet: item.maChiTiet,
-          soLuong: item.soLuong,
-        })
-      }
-
-      setCurrentOrder(updatedOrder)
-      setStep('manage')
+      const newOrder = await adminService.createCounterOrder(orderData)
+      setCurrentOrder(newOrder)
+      setOrderItems([])
+      setAppliedVoucher(false)
       showToast('Tạo đơn hàng thành công', 'success')
-
-      // Reset form
-      setCustomerType('registered')
-      setFormData({
-        maNguoiDung: 0,
-        nguoiNhan: '',
-        soDienThoaiNhan: '',
-        diaChiGiaoHang: 'Tại quầy',
-      })
-      setSelectedItems([])
-      setSelectedProduct(null)
-      setQuantity(1)
-      setVoucherCode('')
     } catch (error: any) {
-      showToast(error.message || 'Failed to create order', 'error')
+      showToast(error.message || 'Lỗi khi tạo đơn hàng', 'error')
     } finally {
-      setLoading(false)
+      setIsLoading(false)
     }
   }
 
-  const handleAddItemToSelection = () => {
-    if (!selectedProduct) {
-      showToast('Vui lòng chọn sản phẩm', 'error')
+  // Mở modal chọn sản phẩm
+  const handleOpenProductModal = () => {
+    if (!currentOrder) {
+      showToast('Vui lòng tạo đơn hàng trước', 'error')
       return
     }
-
-    if (quantity < 1) {
-      showToast('Số lượng phải lớn hơn 0', 'error')
-      return
-    }
-
-    // Tìm sản phẩm
-    const product = products.find(p => p.maChiTiet === selectedProduct)
-    if (!product) {
-      showToast('Sản phẩm không tồn tại', 'error')
-      return
-    }
-
-    // Kiểm tra xem sản phẩm đã được chọn chưa
-    const existingItem = selectedItems.find(item => item.maChiTiet === selectedProduct)
-    if (existingItem) {
-      showToast('Sản phẩm này đã có trong danh sách', 'error')
-      return
-    }
-
-    // Thêm sản phẩm vào danh sách
-    const newItem: SelectedItem = {
-      maChiTiet: product.maChiTiet,
-      tenSanPham: product.tenSanPham,
-      donGia: product.donGia,
-      soLuong: quantity,
-      kichCo: product.kichCo,
-      mauSac: product.mauSac,
-    }
-
-    setSelectedItems([...selectedItems, newItem])
+    setShowProductModal(true)
     setSelectedProduct(null)
-    setQuantity(1)
-    showToast('Thêm sản phẩm vào danh sách thành công', 'success')
+    setSelectedDetail(null)
+    setSelectedQuantity(1)
+    setSearchTerm('')
   }
 
-  const handleRemoveItemFromSelection = (maChiTiet: number) => {
-    setSelectedItems(selectedItems.filter(item => item.maChiTiet !== maChiTiet))
-    showToast('Xóa sản phẩm khỏi danh sách thành công', 'success')
-  }
-
+  // Thêm sản phẩm vào đơn
   const handleAddItem = async () => {
-    if (!selectedProduct) {
+    if (!currentOrder || !selectedDetail) {
       showToast('Vui lòng chọn sản phẩm', 'error')
       return
     }
 
-    if (quantity < 1) {
+    if (selectedQuantity <= 0) {
       showToast('Số lượng phải lớn hơn 0', 'error')
       return
     }
 
-    if (!currentOrder) return
+    if (selectedQuantity > selectedDetail.soLuongTon) {
+      showToast(`Chỉ còn ${selectedDetail.soLuongTon} sản phẩm trong kho`, 'error')
+      return
+    }
 
-    setLoading(true)
+    setIsLoading(true)
     try {
-      const updated = await adminService.addItemToOrder(currentOrder.maDonHang, {
-        maChiTiet: selectedProduct,
-        soLuong: quantity,
+      const updatedOrder = await adminService.addItemToOrder(currentOrder.maDonHang, {
+        maChiTiet: selectedDetail.maChiTiet,
+        soLuong: selectedQuantity
       })
-
-      setCurrentOrder(updated)
-      setSelectedProduct(null)
-      setQuantity(1)
+      
+      setCurrentOrder(updatedOrder)
+      
+      // Cập nhật danh sách items từ API response
+      if (updatedOrder.chiTietDonHangs && updatedOrder.chiTietDonHangs.length > 0) {
+        const items: OrderItem[] = updatedOrder.chiTietDonHangs.map((item: any) => ({
+          maChiTiet: item.maChiTiet,
+          tenSanPham: item.tenSanPham,
+          mauSac: item.mauSac,
+          size: item.size,
+          soLuong: item.soLuong,
+          donGia: item.donGia,
+          thanhTien: item.thanhTien,
+          soLuongTon: selectedDetail.soLuongTon // Giữ thông tin tồn kho hiện tại
+        }))
+        setOrderItems(items)
+      }
+      
+      setShowProductModal(false)
       showToast('Thêm sản phẩm thành công', 'success')
     } catch (error: any) {
-      showToast(error.message || 'Failed to add item', 'error')
+      showToast(error.message || 'Lỗi khi thêm sản phẩm', 'error')
     } finally {
-      setLoading(false)
+      setIsLoading(false)
     }
   }
 
+  // Xóa sản phẩm khỏi đơn
   const handleRemoveItem = async (maChiTiet: number) => {
     if (!currentOrder) return
 
-    setLoading(true)
+    if (!window.confirm('Bạn có chắc muốn xóa sản phẩm này?')) return
+
+    setIsLoading(true)
     try {
-      const updated = await adminService.removeItemFromOrder(
-        currentOrder.maDonHang,
-        maChiTiet
-      )
-      setCurrentOrder(updated)
+      const updatedOrder = await adminService.removeItemFromOrder(currentOrder.maDonHang, maChiTiet)
+      setCurrentOrder(updatedOrder)
+      
+      // Cập nhật danh sách items từ API response
+      if (updatedOrder.chiTietDonHangs && updatedOrder.chiTietDonHangs.length > 0) {
+        const items: OrderItem[] = updatedOrder.chiTietDonHangs.map((item: any) => ({
+          maChiTiet: item.maChiTiet,
+          tenSanPham: item.tenSanPham,
+          mauSac: item.mauSac,
+          size: item.size,
+          soLuong: item.soLuong,
+          donGia: item.donGia,
+          thanhTien: item.thanhTien,
+          soLuongTon: 0 // Không cần thiết cho hiển thị
+        }))
+        setOrderItems(items)
+      } else {
+        setOrderItems([])
+      }
+      
       showToast('Xóa sản phẩm thành công', 'success')
     } catch (error: any) {
-      showToast(error.message || 'Failed to remove item', 'error')
+      showToast(error.message || 'Lỗi khi xóa sản phẩm', 'error')
     } finally {
-      setLoading(false)
+      setIsLoading(false)
     }
   }
 
+  // Áp dụng voucher
   const handleApplyVoucher = async () => {
+    if (!currentOrder) {
+      showToast('Chưa có đơn hàng', 'error')
+      return
+    }
+
     if (!voucherCode.trim()) {
       showToast('Vui lòng nhập mã voucher', 'error')
       return
     }
 
-    if (!currentOrder) return
-
-    setLoading(true)
-    try {
-      const updated = await adminService.applyVoucherToOrder(
-        currentOrder.maDonHang,
-        voucherCode.trim()
-      )
-      setCurrentOrder(updated)
-      setVoucherCode('')
-      showToast('Áp dụng voucher thành công', 'success')
-    } catch (error: any) {
-      showToast(error.message || 'Failed to apply voucher', 'error')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const handleFinalizeOrder = async () => {
-    if (!currentOrder) return
-
-    if (currentOrder.chiTietDonHangs.length === 0) {
-      showToast('Đơn hàng phải có ít nhất 1 sản phẩm', 'error')
+    if (orderItems.length === 0) {
+      showToast('Vui lòng thêm sản phẩm vào đơn hàng', 'error')
       return
     }
 
-    setLoading(true)
+    setIsLoading(true)
     try {
-      const updated = await adminService.finalizeCounterOrder(
-        currentOrder.maDonHang,
-        paymentMethod
-      )
-      setCurrentOrder(updated)
-      setStep('finalize')
-      showToast('Hoàn thành đơn hàng thành công', 'success')
+      const updatedOrder = await adminService.applyVoucherToOrder(currentOrder.maDonHang, voucherCode)
+      setCurrentOrder(updatedOrder)
+      
+      // Cập nhật danh sách items từ API response nếu có
+      if (updatedOrder.chiTietDonHangs && updatedOrder.chiTietDonHangs.length > 0) {
+        const items: OrderItem[] = updatedOrder.chiTietDonHangs.map((item: any) => ({
+          maChiTiet: item.maChiTiet,
+          tenSanPham: item.tenSanPham,
+          mauSac: item.mauSac,
+          size: item.size,
+          soLuong: item.soLuong,
+          donGia: item.donGia,
+          thanhTien: item.thanhTien,
+          soLuongTon: 0
+        }))
+        setOrderItems(items)
+      }
+      
+      setAppliedVoucher(true)
+      showToast('Áp dụng voucher thành công', 'success')
     } catch (error: any) {
-      showToast(error.message || 'Failed to finalize order', 'error')
+      showToast(error.message || 'Lỗi khi áp dụng voucher', 'error')
     } finally {
-      setLoading(false)
+      setIsLoading(false)
     }
   }
 
-  const handleNewOrder = () => {
-    setStep('create')
+  // Hoàn thành đơn hàng (thanh toán tiền mặt)
+  const handleFinalizeOrder = async () => {
+    if (!currentOrder) {
+      showToast('Chưa có đơn hàng', 'error')
+      return
+    }
+
+    if (orderItems.length === 0) {
+      showToast('Đơn hàng chưa có sản phẩm', 'error')
+      return
+    }
+
+    if (!window.confirm(`Xác nhận thanh toán ${formatCurrency(currentOrder.thanhTien)} bằng tiền mặt?`)) {
+      return
+    }
+
+    setIsLoading(true)
+    try {
+      await adminService.finalizeCounterOrder(currentOrder.maDonHang, 'tien_mat')
+      showToast('Hoàn thành đơn hàng thành công', 'success')
+      
+      // Reset form
+      setCurrentOrder(null)
+      setOrderItems([])
+      setNguoiNhan('')
+      setSoDienThoaiNhan('')
+      setMaNguoiDung(0)
+      setVoucherCode('')
+      setAppliedVoucher(false)
+    } catch (error: any) {
+      showToast(error.message || 'Lỗi khi hoàn thành đơn hàng', 'error')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  // Hủy đơn hàng
+  const handleCancelOrder = () => {
+    if (!window.confirm('Bạn có chắc muốn hủy đơn hàng này?')) return
+    
     setCurrentOrder(null)
-    setSelectedProduct(null)
-    setQuantity(1)
+    setOrderItems([])
+    setNguoiNhan('')
+    setSoDienThoaiNhan('')
+    setMaNguoiDung(0)
     setVoucherCode('')
-    setPaymentMethod('tien_mat')
-    setCustomerType('registered')
-    setFormData({
-      maNguoiDung: 0,
-      nguoiNhan: '',
-      soDienThoaiNhan: '',
-      diaChiGiaoHang: 'Tại quầy',
-    })
+    setAppliedVoucher(false)
+    setCustomerType('guest')
+    showToast('Đã hủy đơn hàng', 'info')
   }
 
-  const getProductName = (maChiTiet: number) => {
-    const product = products.find(p => p.maChiTiet === maChiTiet)
-    if (!product) return `Sản phẩm #${maChiTiet}`
-
-    let name = product.tenSanPham
-    if (product.kichCo) name += ` - ${product.kichCo}`
-    if (product.mauSac) name += ` (${product.mauSac})`
-
-    return name
-  }
-
-  const formatCurrency = (value: number) => {
+  // Format tiền tệ
+  const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('vi-VN', {
       style: 'currency',
-      currency: 'VND',
-    }).format(value)
+      currency: 'VND'
+    }).format(amount)
   }
 
+  // Filter products theo search term
+  const filteredProducts = products.filter(p => 
+    p.tenSanPham.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    p.thuongHieu.toLowerCase().includes(searchTerm.toLowerCase())
+  )
+
   return (
-    <div className="counter-order-container">
-      <h2 className="counter-order-title">Tạo Đơn Hàng Tại Quầy (POS)</h2>
+    <div className="counter-order-tab">
+      <h2>Bán Hàng Tại Quầy</h2>
 
-      {step === 'create' && (
-        <div className="counter-order-section">
-          <div className="create-order-layout">
-            {/* Left Column: Customer Info & Products */}
-            <div className="create-order-left">
-              <h3>Thông tin khách hàng</h3>
-
-              {/* Customer Type Selection */}
-              <div className="customer-type-selector">
-                <label className="type-option">
-                  <input
-                    type="radio"
-                    name="customerType"
-                    value="registered"
-                    checked={customerType === 'registered'}
-                    onChange={e => setCustomerType(e.target.value as CustomerType)}
-                  />
-                  <span> Khách hàng đã đăng ký</span>
-                </label>
-                <label className="type-option">
-                  <input
-                    type="radio"
-                    name="customerType"
-                    value="guest"
-                    checked={customerType === 'guest'}
-                    onChange={e => setCustomerType(e.target.value as CustomerType)}
-                  />
-                  <span>🚶 Khách vãng lai (không tài khoản)</span>
-                </label>
-              </div>
-
-              <form className="counter-form">
-                {customerType === 'registered' && (
-                  <div className="form-group">
-                    <label htmlFor="customer">Chọn khách hàng *</label>
-                    <select
-                      id="customer"
-                      value={formData.maNguoiDung}
-                      onChange={e => {
-                        const userId = Number(e.target.value)
-                        const user = users.find(u => u.maNguoiDung === userId)
-                        if (user) {
-                          setFormData({
-                            ...formData,
-                            maNguoiDung: userId,
-                            nguoiNhan: user.ten || user.tenDangNhap,
-                            soDienThoaiNhan: user.soDienThoai || '',
-                          })
-                        }
-                      }}
-                      required
-                    >
-                      <option value={0}>-- Chọn khách hàng --</option>
-                      {users.map(user => (
-                        <option key={user.maNguoiDung} value={user.maNguoiDung}>
-                          {user.ten || user.tenDangNhap} ({user.soDienThoai || 'Chưa cập nhật'})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                )}
-
-                <div className="form-group">
-                  <label htmlFor="nguoiNhan">Tên người nhận *</label>
-                  <input
-                    type="text"
-                    id="nguoiNhan"
-                    value={formData.nguoiNhan}
-                    onChange={e => setFormData({ ...formData, nguoiNhan: e.target.value })}
-                    placeholder="Nhập tên người nhận"
-                    required
-                  />
-                </div>
-
-                <div className="form-group">
-                  <label htmlFor="soDienThoaiNhan">Số điện thoại *</label>
-                  <input
-                    type="tel"
-                    id="soDienThoaiNhan"
-                    value={formData.soDienThoaiNhan}
-                    onChange={e =>
-                      setFormData({ ...formData, soDienThoaiNhan: e.target.value })
-                    }
-                    placeholder="Nhập số điện thoại"
-                    required
-                  />
-                </div>
-
-                <div className="form-group">
-                  <label htmlFor="diaChiGiaoHang">Địa chỉ giao hàng</label>
-                  <input
-                    type="text"
-                    id="diaChiGiaoHang"
-                    value={formData.diaChiGiaoHang}
-                    onChange={e =>
-                      setFormData({ ...formData, diaChiGiaoHang: e.target.value })
-                    }
-                    placeholder="Tại quầy"
-                  />
-                </div>
-
-                {customerType === 'guest' && (
-                  <div className="guest-info-note">
-                    <p><strong>Khách vãng lai:</strong> Không cần tài khoản, chỉ cần nhập tên và số điện thoại</p>
-                  </div>
-                )}
-              </form>
-
-              <h3 style={{ marginTop: '24px' }}>Chọn sản phẩm</h3>
-              <div className="product-selection-form">
-                <div className="form-group">
-                  <label htmlFor="product-select">Sản phẩm *</label>
-                  <select
-                    id="product-select"
-                    value={selectedProduct || ''}
-                    onChange={e => setSelectedProduct(Number(e.target.value) || null)}
-                  >
-                    <option value="">-- Chọn sản phẩm --</option>
-                    {products.map(product => (
-                      <option key={product.maChiTiet} value={product.maChiTiet}>
-                        {product.tenSanPham}
-                        {product.kichCo ? ` (Size: ${product.kichCo})` : ''}
-                        {product.mauSac ? ` - ${product.mauSac}` : ''}
-                        {product.soLuongTon > 0 ? ` [Tồn: ${product.soLuongTon}]` : ' [Hết]'}
-                        - {formatCurrency(product.donGia)}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="form-group">
-                  <label htmlFor="quantity-input">Số lượng *</label>
-                  <div className="quantity-input-group">
-                    <input
-                      id="quantity-input"
-                      type="number"
-                      min="1"
-                      value={quantity}
-                      onChange={e => setQuantity(Math.max(1, Number(e.target.value)))}
-                    />
-                    <button
-                      type="button"
-                      onClick={handleAddItemToSelection}
-                      disabled={!selectedProduct || quantity < 1}
-                      className="btn btn-secondary"
-                    >
-                      Thêm
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Right Column: Order Summary */}
-            <div className="create-order-right">
-              <h3>Giỏ hàng</h3>
-
-              {selectedItems.length > 0 ? (
-                <>
-                  <div className="items-summary-list">
-                    {selectedItems.map((item, index) => (
-                      <div key={index} className="summary-item">
-                        <div className="item-details">
-                          <p className="item-name">{item.tenSanPham}</p>
-                          {item.kichCo && <p className="item-spec">Size: {item.kichCo}</p>}
-                          {item.mauSac && <p className="item-spec">Màu: {item.mauSac}</p>}
-                          <p className="item-price">{formatCurrency(item.donGia)}</p>
-                        </div>
-                        <div className="item-quantity">
-                          <span className="qty-label">x{item.soLuong}</span>
-                        </div>
-                        <div className="item-total">
-                          <span className="total-price">
-                            {formatCurrency(item.donGia * item.soLuong)}
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveItemFromSelection(item.maChiTiet)}
-                            className="btn btn-danger btn-small"
-                          >
-                            ✕
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="summary-totals">
-                    <div className="total-row">
-                      <span>Tổng cộng:</span>
-                      <span className="amount">
-                        {formatCurrency(
-                          selectedItems.reduce((sum, item) => sum + item.donGia * item.soLuong, 0)
-                        )}
-                      </span>
-                    </div>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={handleCreateOrder}
-                    disabled={loading || selectedItems.length === 0}
-                    className="btn btn-success btn-large"
-                  >
-                    {loading ? 'Đang xử lý...' : 'Tạo đơn hàng'}
-                  </button>
-                </>
-              ) : (
-                <div className="empty-cart">
-                  <p>Chưa có sản phẩm</p>
-                  <p className="hint">Chọn sản phẩm từ bên trái để thêm vào giỏ</p>
-                </div>
-              )}
-            </div>
-          </div>
+      {/* Thông tin khách hàng */}
+      <div className="customer-section">
+        <h3>Thông Tin Khách Hàng</h3>
+        
+        <div className="customer-type-selector">
+          <label>
+            <input
+              type="radio"
+              name="customerType"
+              value="guest"
+              checked={customerType === 'guest'}
+              onChange={(e) => setCustomerType(e.target.value as 'guest')}
+              disabled={!!currentOrder}
+            />
+            Khách vãng lai
+          </label>
+          <label>
+            <input
+              type="radio"
+              name="customerType"
+              value="registered"
+              checked={customerType === 'registered'}
+              onChange={(e) => setCustomerType(e.target.value as 'registered')}
+              disabled={!!currentOrder}
+            />
+            Khách hàng đã đăng ký
+          </label>
         </div>
-      )}
 
-      {step === 'manage' && currentOrder && (
-        <div className="counter-order-section">
-          <div className="order-header">
-            <div className="order-info">
-              <h3>Đơn hàng #{currentOrder.maDonHang}</h3>
-              <p>
-                <strong>Khách:</strong> {currentOrder.nguoiNhan}
-              </p>
-              <p>
-                <strong>SĐT:</strong> {currentOrder.soDienThoaiNhan}
-              </p>
-            </div>
+        {customerType === 'registered' && maNguoiDung > 0 && (
+          <div className="form-group">
+            <label>Mã khách hàng:</label>
+            <input
+              type="number"
+              value={maNguoiDung}
+              disabled
+              style={{ background: '#e8f5e9', color: '#2e7d32', fontWeight: 600 }}
+            />
           </div>
+        )}
 
-          <div className="add-items-section">
-            <h3>Thêm sản phẩm</h3>
-            <div className="add-item-form">
-              <div className="form-group">
-                <label htmlFor="product">Chọn sản phẩm</label>
-                <select
-                  id="product"
-                  value={selectedProduct || ''}
-                  onChange={e => setSelectedProduct(Number(e.target.value) || null)}
-                >
-                  <option value="">-- Chọn sản phẩm --</option>
-                  {products.map(product => (
-                    <option key={product.maChiTiet} value={product.maChiTiet}>
-                      {product.tenSanPham}
-                      {product.kichCo ? ` (Size: ${product.kichCo})` : ''}
-                      {product.mauSac ? ` - ${product.mauSac}` : ''}
-                      {product.soLuongTon > 0 ? ` [Tồn: ${product.soLuongTon}]` : ' [Hết]'}
-                      - {formatCurrency(product.donGia)}
-                    </option>
-                  ))}
-                </select>
-              </div>
+        <div className="form-group">
+          <label>Số điện thoại: *</label>
+          <input
+            type="tel"
+            value={soDienThoaiNhan}
+            onChange={(e) => handlePhoneChange(e.target.value)}
+            disabled={!!currentOrder}
+            placeholder="Nhập số điện thoại"
+            required
+          />
+          {isSearchingCustomer && <small style={{ color: '#2196f3' }}>Đang tìm kiếm...</small>}
+        </div>
 
-              <div className="form-group">
-                <label htmlFor="quantity">Số lượng</label>
-                <input
-                  type="number"
-                  id="quantity"
-                  min="1"
-                  value={quantity}
-                  onChange={e => setQuantity(Math.max(1, Number(e.target.value)))}
-                />
-              </div>
+        <div className="form-group">
+          <label>Tên khách hàng: *</label>
+          <input
+            type="text"
+            value={nguoiNhan}
+            onChange={(e) => setNguoiNhan(e.target.value)}
+            disabled={!!currentOrder || (customerType === 'registered' && maNguoiDung > 0)}
+            placeholder={customerType === 'registered' ? 'Tự động điền sau khi nhập SĐT' : 'Nhập tên khách hàng'}
+            required
+          />
+        </div>
 
-              <button
-                onClick={handleAddItem}
-                disabled={loading || !selectedProduct}
+        {!currentOrder && (
+          <button 
+            className="btn btn-primary"
+            onClick={handleCreateOrder}
+            disabled={isLoading}
+          >
+            Tạo Đơn Hàng
+          </button>
+        )}
+      </div>
+
+      {/* Danh sách sản phẩm trong đơn */}
+      {currentOrder && (
+        <>
+          <div className="order-section">
+            <div className="order-header">
+              <h3>Đơn Hàng #{currentOrder.maDonHang}</h3>
+              <button 
                 className="btn btn-secondary"
+                onClick={handleOpenProductModal}
+                disabled={isLoading}
               >
-                {loading ? 'Đang xử lý...' : 'Thêm vào đơn'}
+                + Thêm Sản Phẩm
               </button>
             </div>
+
+            {orderItems.length === 0 ? (
+              <p className="empty-order">Chưa có sản phẩm trong đơn hàng</p>
+            ) : (
+              <div className="order-items">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Sản phẩm</th>
+                      <th>Màu sắc</th>
+                      <th>Size</th>
+                      <th>Đơn giá</th>
+                      <th>Số lượng</th>
+                      <th>Thành tiền</th>
+                      <th>Thao tác</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {orderItems.map((item) => (
+                      <tr key={item.maChiTiet}>
+                        <td>{item.tenSanPham}</td>
+                        <td>{item.mauSac}</td>
+                        <td>{item.size}</td>
+                        <td>{formatCurrency(item.donGia)}</td>
+                        <td>{item.soLuong}</td>
+                        <td className="price">{formatCurrency(item.thanhTien)}</td>
+                        <td>
+                          <button
+                            className="btn btn-danger btn-sm"
+                            onClick={() => handleRemoveItem(item.maChiTiet)}
+                            disabled={isLoading}
+                          >
+                            Xóa
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
 
-          {currentOrder.chiTietDonHangs.length > 0 && (
-            <div className="items-list-section">
-              <h3>Sản phẩm trong đơn</h3>
-              <table className="items-table">
-                <thead>
-                  <tr>
-                    <th>Sản phẩm</th>
-                    <th>Đơn giá</th>
-                    <th>Số lượng</th>
-                    <th>Thành tiền</th>
-                    <th>Hành động</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {currentOrder.chiTietDonHangs.map(item => (
-                    <tr key={item.maChiTiet}>
-                      <td>{getProductName(item.maChiTiet)}</td>
-                      <td>{formatCurrency(item.donGia)}</td>
-                      <td className="quantity-cell">{item.soLuong}</td>
-                      <td>{formatCurrency(item.thanhTien)}</td>
-                      <td>
-                        <button
-                          onClick={() => handleRemoveItem(item.maChiTiet)}
-                          disabled={loading}
-                          className="btn btn-danger btn-small"
-                        >
-                          Xóa
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-
+          {/* Voucher */}
           <div className="voucher-section">
-            <h3>Áp dụng voucher</h3>
-            <div className="voucher-form">
+            <h3>Mã Giảm Giá</h3>
+            <div className="voucher-input">
               <input
                 type="text"
                 value={voucherCode}
-                onChange={e => setVoucherCode(e.target.value)}
+                onChange={(e) => setVoucherCode(e.target.value)}
                 placeholder="Nhập mã voucher"
+                disabled={appliedVoucher || isLoading}
               />
               <button
-                onClick={handleApplyVoucher}
-                disabled={loading || !voucherCode.trim()}
                 className="btn btn-secondary"
+                onClick={handleApplyVoucher}
+                disabled={appliedVoucher || isLoading || orderItems.length === 0}
               >
-                {loading ? 'Đang xử lý...' : 'Áp dụng'}
+                {appliedVoucher ? 'Đã áp dụng' : 'Áp dụng'}
               </button>
             </div>
           </div>
 
+          {/* Tổng tiền */}
           <div className="order-summary">
             <div className="summary-row">
-              <span>Tổng tiền:</span>
-              <span className="amount">{formatCurrency(currentOrder.tongTien)}</span>
+              <span>Tổng tiền hàng:</span>
+              <span className="price">{formatCurrency(currentOrder.tongTien)}</span>
             </div>
             {currentOrder.giamGia > 0 && (
               <div className="summary-row discount">
                 <span>Giảm giá:</span>
-                <span className="amount">-{formatCurrency(currentOrder.giamGia)}</span>
+                <span className="price">-{formatCurrency(currentOrder.giamGia)}</span>
               </div>
             )}
             <div className="summary-row total">
-              <span>Thành tiền:</span>
-              <span className="amount">{formatCurrency(currentOrder.thanhTien)}</span>
+              <span>Tổng thanh toán:</span>
+              <span className="price">{formatCurrency(currentOrder.thanhTien)}</span>
             </div>
           </div>
 
-          <div className="action-buttons">
+          {/* Nút thao tác */}
+          <div className="order-actions">
             <button
-              onClick={() => setStep('finalize')}
-              disabled={loading || currentOrder.chiTietDonHangs.length === 0}
-              className="btn btn-success"
+              className="btn btn-danger"
+              onClick={handleCancelOrder}
+              disabled={isLoading}
             >
-              Tiếp tục thanh toán
+              Hủy Đơn
             </button>
             <button
-              onClick={handleNewOrder}
-              className="btn btn-outline"
+              className="btn btn-success btn-lg"
+              onClick={handleFinalizeOrder}
+              disabled={isLoading || orderItems.length === 0}
             >
-              Hủy & tạo đơn mới
+              Thanh Toán Tiền Mặt
             </button>
           </div>
-        </div>
+        </>
       )}
 
-      {step === 'finalize' && currentOrder && (
-        <div className="counter-order-section">
-          <div className="finalize-container">
-            <h3>Hoàn thành đơn hàng</h3>
-
-            <div className="order-summary-large">
-              <div className="order-details">
-                <h4>Thông tin đơn hàng</h4>
-                <p>
-                  <strong>Mã đơn:</strong> {currentOrder.maDonHang}
-                </p>
-                <p>
-                  <strong>Khách:</strong> {currentOrder.nguoiNhan}
-                </p>
-                <p>
-                  <strong>SĐT:</strong> {currentOrder.soDienThoaiNhan}
-                </p>
-                <p>
-                  <strong>Địa chỉ:</strong> {currentOrder.diaChiGiaoHang}
-                </p>
+      {/* Modal chọn sản phẩm */}
+      {showProductModal && (
+        <div className="modal-overlay" onClick={() => setShowProductModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Chọn Sản Phẩm</h3>
+              <button className="close-btn" onClick={() => setShowProductModal(false)}>×</button>
+            </div>
+            
+            <div className="modal-body">
+              {/* Tìm kiếm sản phẩm */}
+              <div className="search-box">
+                <input
+                  type="text"
+                  placeholder="Tìm kiếm sản phẩm..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
               </div>
 
-              <div className="total-section">
-                <div className="total-item">
-                  <span>Tổng tiền:</span>
-                  <span className="price">{formatCurrency(currentOrder.tongTien)}</span>
+              {/* Danh sách sản phẩm */}
+              <div className="product-list">
+                <h4>Chọn sản phẩm:</h4>
+                <div className="products-counter-grid">
+                  {filteredProducts.map((product) => (
+                    <div
+                      key={product.maSanPham}
+                      className={`product-card ${selectedProduct === product.maSanPham ? 'selected' : ''}`}
+                      onClick={() => setSelectedProduct(product.maSanPham)}
+                    >
+                      <h5>{product.tenSanPham}</h5>
+                      <p>{product.thuongHieu}</p>
+                      <p className="price">{formatCurrency(product.giaCoBan)}</p>
+                    </div>
+                  ))}
                 </div>
-                {currentOrder.giamGia > 0 && (
-                  <div className="total-item discount">
-                    <span>Giảm giá:</span>
-                    <span className="price">-{formatCurrency(currentOrder.giamGia)}</span>
+              </div>
+
+              {/* Chi tiết sản phẩm (màu sắc, size) */}
+              {selectedProduct && productDetails.length > 0 && (
+                <div className="product-details">
+                  <h4>Chọn màu sắc và size:</h4>
+                  <div className="details-grid">
+                    {productDetails.map((detail) => (
+                      <div
+                        key={detail.maChiTiet}
+                        className={`detail-card ${selectedDetail?.maChiTiet === detail.maChiTiet ? 'selected' : ''} ${detail.soLuongTon === 0 ? 'out-of-stock' : ''}`}
+                        onClick={() => detail.soLuongTon > 0 && setSelectedDetail(detail)}
+                      >
+                        <div className="detail-info">
+                          <span className="color">{detail.mauSac}</span>
+                          <span className="size">Size: {detail.size}</span>
+                        </div>
+                        <div className="detail-price">
+                          <span className="price">{formatCurrency(detail.giaBan)}</span>
+                          <span className="stock">Kho: {detail.soLuongTon}</span>
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                )}
-                <div className="total-item final">
-                  <span>Thành tiền:</span>
-                  <span className="price">{formatCurrency(currentOrder.thanhTien)}</span>
                 </div>
-              </div>
-            </div>
-
-            <div className="payment-method-section">
-              <h4>Chọn phương thức thanh toán</h4>
-              <div className="payment-options">
-                <label className="payment-option">
-                  <input
-                    type="radio"
-                    name="payment"
-                    value="tien_mat"
-                    checked={paymentMethod === 'tien_mat'}
-                    onChange={e => setPaymentMethod(e.target.value as PaymentMethod)}
-                  />
-                  <span>Tiền mặt</span>
-                </label>
-                <label className="payment-option">
-                  <input
-                    type="radio"
-                    name="payment"
-                    value="chuyen_khoan"
-                    checked={paymentMethod === 'chuyen_khoan'}
-                    onChange={e => setPaymentMethod(e.target.value as PaymentMethod)}
-                  />
-                  <span>Chuyển khoản</span>
-                </label>
-                <label className="payment-option">
-                  <input
-                    type="radio"
-                    name="payment"
-                    value="the_tin_dung"
-                    checked={paymentMethod === 'the_tin_dung'}
-                    onChange={e => setPaymentMethod(e.target.value as PaymentMethod)}
-                  />
-                  <span>Thẻ tín dụng</span>
-                </label>
-                <label className="payment-option">
-                  <input
-                    type="radio"
-                    name="payment"
-                    value="vi_dien_tu"
-                    checked={paymentMethod === 'vi_dien_tu'}
-                    onChange={e => setPaymentMethod(e.target.value as PaymentMethod)}
-                  />
-                  <span>📱 Ví điện tử</span>
-                </label>
-              </div>
-            </div>
-
-            {currentOrder.trangThaiDonHang === 'hoan_thanh' && (
-              <div className="success-message">
-                <p>Đơn hàng đã được hoàn thành thành công!</p>
-              </div>
-            )}
-
-            <div className="finalize-buttons">
-              {currentOrder.trangThaiDonHang !== 'hoan_thanh' && (
-                <button
-                  onClick={handleFinalizeOrder}
-                  disabled={loading}
-                  className="btn btn-success btn-large"
-                >
-                  {loading ? 'Đang xử lý...' : 'Hoàn thành thanh toán'}
-                </button>
               )}
-              <button
-                onClick={handleNewOrder}
-                className="btn btn-primary btn-large"
+
+              {/* Số lượng */}
+              {selectedDetail && (
+                <div 
+                  className="quantity-section"
+                  onClick={(e) => e.stopPropagation()}
+                  onMouseDown={(e) => e.stopPropagation()}
+                >
+                  <label>Số lượng:</label>
+                  <div className="quantity-input">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                        setSelectedQuantity(Math.max(1, selectedQuantity - 1))
+                      }}
+                      onMouseDown={(e) => e.stopPropagation()}
+                      disabled={selectedQuantity <= 1}
+                    >
+                      -
+                    </button>
+                    <input
+                      type="number"
+                      value={selectedQuantity}
+                      onChange={(e) => {
+                        const val = parseInt(e.target.value) || 1
+                        setSelectedQuantity(Math.min(Math.max(1, val), selectedDetail.soLuongTon))
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                      onMouseDown={(e) => e.stopPropagation()}
+                      onFocus={(e) => e.target.select()}
+                      min="1"
+                      max={selectedDetail.soLuongTon}
+                    />
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                        setSelectedQuantity(Math.min(selectedQuantity + 1, selectedDetail.soLuongTon))
+                      }}
+                      onMouseDown={(e) => e.stopPropagation()}
+                      disabled={selectedQuantity >= selectedDetail.soLuongTon}
+                    >
+                      +
+                    </button>
+                  </div>
+                  <span className="max-quantity">Tối đa: {selectedDetail.soLuongTon}</span>
+                </div>
+              )}
+            </div>
+
+            <div className="modal-footer">
+              <button 
+                className="btn btn-secondary"
+                onClick={() => setShowProductModal(false)}
               >
-                {currentOrder.trangThaiDonHang === 'hoan_thanh'
-                  ? 'Tạo đơn mới'
-                  : 'Quay lại'}
+                Hủy
+              </button>
+              <button
+                className="btn btn-primary"
+                onClick={handleAddItem}
+                disabled={!selectedDetail || isLoading}
+              >
+                Thêm vào đơn
               </button>
             </div>
           </div>

@@ -63,7 +63,6 @@ const StatisticsTab = () => {
 
       <div className="stats-grid">
         <div className="stat-card">
-          <div className="stat-icon">👥</div>
           <div className="stat-content">
             <h3>Tổng người dùng</h3>
             <p className="stat-value">{stats?.totalUsers || 0}</p>
@@ -71,7 +70,6 @@ const StatisticsTab = () => {
         </div>
 
         <div className="stat-card">
-          <div className="stat-icon">📦</div>
           <div className="stat-content">
             <h3>Tổng đơn hàng</h3>
             <p className="stat-value">{stats?.totalOrders || 0}</p>
@@ -79,7 +77,6 @@ const StatisticsTab = () => {
         </div>
 
         <div className="stat-card">
-          <div className="stat-icon">🛍️</div>
           <div className="stat-content">
             <h3>Tổng sản phẩm</h3>
             <p className="stat-value">{stats?.totalProducts || 0}</p>
@@ -87,7 +84,6 @@ const StatisticsTab = () => {
         </div>
 
         <div className="stat-card highlight">
-          <div className="stat-icon">💰</div>
           <div className="stat-content">
             <h3>Tổng doanh thu</h3>
             <p className="stat-value">
@@ -97,7 +93,6 @@ const StatisticsTab = () => {
         </div>
 
         <div className="stat-card">
-          <div className="stat-icon">📈</div>
           <div className="stat-content">
             <h3>Đơn hàng tháng này</h3>
             <p className="stat-value">{stats?.ordersThisMonth || 0}</p>
@@ -105,7 +100,6 @@ const StatisticsTab = () => {
         </div>
 
         <div className="stat-card">
-          <div className="stat-icon">✅</div>
           <div className="stat-content">
             <h3>Sản phẩm hoạt động</h3>
             <p className="stat-value">{stats?.activeProducts || 0}</p>
@@ -182,7 +176,7 @@ const StatisticsTab = () => {
                 <tr key={index}>
                   <td>{index + 1}</td>
                   <td>{product.tenSanPham || product.name}</td>
-                  <td className="quantity">{product.soLuong || product.quantity}</td>
+                  <td className="quantity">{product.soLuongBan || product.quantity}</td>
                 </tr>
               ))}
             </tbody>

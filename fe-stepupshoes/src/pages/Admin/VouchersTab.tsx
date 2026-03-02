@@ -5,14 +5,18 @@ import './VouchersTab.css'
 
 interface Voucher {
   maVoucher: number
-  maVoucherCode: string
+  code: string
   moTa: string
   giaTriGiam: number
   loaiGiam: string
-  dieuKienThamGia: number
+  giaTriToiThieu: number
+  giamToiDa?: number
+  soLuongDaDung?: number
+  trangThai?: boolean
   ngayBatDau: string
   ngayKetThuc: string
   soLuong: number
+  ngayTao?: string
 }
 
 const VouchersTab = () => {
@@ -26,11 +30,12 @@ const VouchersTab = () => {
   const [showForm, setShowForm] = useState(false)
   const [editingVoucher, setEditingVoucher] = useState<Voucher | null>(null)
   const [formData, setFormData] = useState<Partial<Voucher>>({
-    maVoucherCode: '',
+    code: '',
     moTa: '',
     giaTriGiam: 0,
-    loaiGiam: 'percent',
-    dieuKienThamGia: 0,
+    loaiGiam: 'phan_tram',
+    giaTriToiThieu: 0,
+    giamToiDa: 0,
     ngayBatDau: '',
     ngayKetThuc: '',
     soLuong: 0,
@@ -48,7 +53,10 @@ const VouchersTab = () => {
       setVouchers(data.vouchers || [])
       setTotalPages(data.totalPages || 0)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Lỗi khi tải dữ liệu')
+      console.error('Error fetching vouchers:', err)
+      const errorMessage = err instanceof Error ? err.message : 'Lỗi khi tải dữ liệu'
+      setError(errorMessage)
+      showToast(errorMessage, 'error')
     } finally {
       setLoading(false)
     }
@@ -56,7 +64,13 @@ const VouchersTab = () => {
 
   const handleEdit = (voucher: Voucher) => {
     setEditingVoucher(voucher)
-    setFormData(voucher)
+    // Format datetime for datetime-local input (YYYY-MM-DDTHH:mm)
+    const formattedVoucher = {
+      ...voucher,
+      ngayBatDau: voucher.ngayBatDau ? new Date(voucher.ngayBatDau).toISOString().slice(0, 16) : '',
+      ngayKetThuc: voucher.ngayKetThuc ? new Date(voucher.ngayKetThuc).toISOString().slice(0, 16) : '',
+    }
+    setFormData(formattedVoucher)
     setShowForm(true)
   }
 
@@ -73,11 +87,12 @@ const VouchersTab = () => {
       setShowForm(false)
       setEditingVoucher(null)
       setFormData({
-        maVoucherCode: '',
+        code: '',
         moTa: '',
         giaTriGiam: 0,
-        loaiGiam: 'percent',
-        dieuKienThamGia: 0,
+        loaiGiam: 'phan_tram',
+        giaTriToiThieu: 0,
+        giamToiDa: 0,
         ngayBatDau: '',
         ngayKetThuc: '',
         soLuong: 0,
@@ -115,11 +130,12 @@ const VouchersTab = () => {
           onClick={() => {
             setEditingVoucher(null)
             setFormData({
-              maVoucherCode: '',
+              code: '',
               moTa: '',
               giaTriGiam: 0,
-              loaiGiam: 'percent',
-              dieuKienThamGia: 0,
+              loaiGiam: 'phan_tram',
+              giaTriToiThieu: 0,
+              giamToiDa: 0,
               ngayBatDau: '',
               ngayKetThuc: '',
               soLuong: 0,
@@ -138,7 +154,7 @@ const VouchersTab = () => {
               <th>Mã voucher</th>
               <th>Mô tả</th>
               <th>Giá trị giảm</th>
-              <th>Điều kiện</th>
+              <th>Đã dùng</th>
               <th>Bắt đầu</th>
               <th>Kết thúc</th>
               <th>Số lượng</th>
@@ -149,16 +165,16 @@ const VouchersTab = () => {
             {vouchers.map((voucher) => (
               <tr key={voucher.maVoucher}>
                 <td>
-                  <span className="voucher-code">{voucher.maVoucherCode}</span>
+                  <span className="voucher-code">{voucher.code}</span>
                 </td>
                 <td>{voucher.moTa}</td>
                 <td>
                   <span className="discount-value">
                     {voucher.giaTriGiam}
-                    {voucher.loaiGiam === 'percent' ? '%' : ' ₫'}
+                    {voucher.loaiGiam === 'phan_tram' ? '%' : ' ₫'}
                   </span>
                 </td>
-                <td>{voucher.dieuKienThamGia.toLocaleString('vi-VN')} ₫</td>
+                <td>{voucher.soLuongDaDung || 0}</td>
                 <td>{new Date(voucher.ngayBatDau).toLocaleDateString('vi-VN')}</td>
                 <td>{new Date(voucher.ngayKetThuc).toLocaleDateString('vi-VN')}</td>
                 <td className="quantity">{voucher.soLuong}</td>
@@ -204,8 +220,8 @@ const VouchersTab = () => {
                   <input
                     type="text"
                     required
-                    value={formData.maVoucherCode || ''}
-                    onChange={(e) => setFormData({ ...formData, maVoucherCode: e.target.value })}
+                    value={formData.code || ''}
+                    onChange={(e) => setFormData({ ...formData, code: e.target.value })}
                   />
                 </div>
                 <div className="form-group">
@@ -230,21 +246,29 @@ const VouchersTab = () => {
                   <div className="form-group">
                     <label>Loại giảm:</label>
                     <select
-                      value={formData.loaiGiam || 'percent'}
+                      value={formData.loaiGiam || 'phan_tram'}
                       onChange={(e) => setFormData({ ...formData, loaiGiam: e.target.value })}
                     >
-                      <option value="percent">Phần trăm (%)</option>
-                      <option value="fixed">Số tiền cố định (₫)</option>
+                      <option value="phan_tram">Phần trăm (%)</option>
+                      <option value="so_tien">Số tiền cố định (₫)</option>
                     </select>
                   </div>
                 </div>
                 <div className="form-group">
-                  <label>Điều kiện tham gia (tối thiểu):</label>
+                  <label>Giá trị tối thiểu:</label>
                   <input
                     type="number"
                     required
-                    value={formData.dieuKienThamGia || 0}
-                    onChange={(e) => setFormData({ ...formData, dieuKienThamGia: parseFloat(e.target.value) })}
+                    value={formData.giaTriToiThieu || 0}
+                    onChange={(e) => setFormData({ ...formData, giaTriToiThieu: parseFloat(e.target.value) })}
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Giảm tối đa (nếu là %):</label>
+                  <input
+                    type="number"
+                    value={formData.giamToiDa || 0}
+                    onChange={(e) => setFormData({ ...formData, giamToiDa: parseFloat(e.target.value) })}
                   />
                 </div>
                 <div className="form-row">

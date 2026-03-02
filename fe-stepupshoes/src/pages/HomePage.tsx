@@ -1,15 +1,8 @@
-import { useAuth } from "../context/AuthContext";
 import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
+import { useCart } from "../context/CartContext";
 import { adminService } from "../services/api";
 import "./HomePage.css";
-
-interface DanhMuc {
-  maDanhMuc: number;
-  tenDanhMuc: string;
-  moTa: string;
-  maDanhMucCha?: number | null;
-  trangThai?: boolean;
-}
 
 interface ProductDetail {
   maChiTiet?: number;
@@ -39,24 +32,33 @@ interface Product {
   trangThai: boolean;
   ngayTao?: string;
   ngayCapNhat?: string;
-  chiTietSanPham: ProductDetail;
+  chiTietSanPhams?: ProductDetail[];
 }
 
 export const HomePage = () => {
-  const { user, logout } = useAuth();
+  const { addToCart, loading: cartLoading } = useCart();
+  const [searchParams] = useSearchParams();
   const [products, setProducts] = useState<Product[]>([]);
-  const [categories, setCategories] = useState<DanhMuc[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<number | null>(null);
 
+  // Read category from URL params
+  useEffect(() => {
+    const categoryParam = searchParams.get('category');
+    if (categoryParam) {
+      setSelectedCategory(parseInt(categoryParam));
+    } else {
+      setSelectedCategory(null);
+    }
+  }, [searchParams]);
+
   useEffect(() => {
     setLoading(true);
     Promise.all([adminService.getProducts(), adminService.getAllCategories()])
-      .then(([productsData, categoriesData]) => {
+      .then(([productsData]) => {
         setProducts(productsData || []);
-        setCategories(categoriesData || []);
         setError(null);
       })
       .catch((err) => {
@@ -78,138 +80,6 @@ export const HomePage = () => {
     <div className="home-container">
       {/* Hero Header */}
       <header className="hero-header">
-        <nav className="navbar">
-          <div className="nav-content">
-            <div className="logo">
-              {/* <svg
-                width="32"
-                height="32"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-              >
-                <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
-              </svg> */}
-              <span>StepUp Shoes</span>
-            </div>
-
-            <div className="nav-links">
-              <div className="nav-item-dropdown">
-                <a href="#categories" className="nav-link">
-                  Danh mục
-                  <svg
-                    width="16"
-                    height="16"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    className="dropdown-icon"
-                  >
-                    <polyline points="6 9 12 15 18 9" />
-                  </svg>
-                </a>
-                <div className="dropdown-menu">
-                  <div className="dropdown-content">
-                    {categories
-                      .filter((cat) => !cat.maDanhMucCha)
-                      .map((cat) => {
-                        const childCategories = categories.filter(
-                          (c) => c.maDanhMucCha === cat.maDanhMuc,
-                        );
-
-                        return (
-                          <div
-                            key={cat.maDanhMuc}
-                            className="dropdown-item-parent"
-                          >
-                            <a
-                              href={`#category-${cat.maDanhMuc}`}
-                              className="dropdown-item"
-                              onClick={(e) => {
-                                e.preventDefault();
-                                // setSelectedCategory(cat.maDanhMuc);
-                              }}
-                            >
-                              <div className="item-text">
-                                <strong>{cat.tenDanhMuc}</strong>
-                                <span>{cat.moTa || "Khám phá ngay"}</span>
-                              </div>
-                              {childCategories.length > 0 && (
-                                <svg
-                                  width="16"
-                                  height="16"
-                                  viewBox="0 0 24 24"
-                                  fill="none"
-                                  stroke="currentColor"
-                                  strokeWidth="2"
-                                  className="arrow-right"
-                                >
-                                  <polyline points="9 18 15 12 9 6" />
-                                </svg>
-                              )}
-                            </a>
-                            {childCategories.length > 0 && (
-                              <div className="dropdown-submenu">
-                                {childCategories.map((child) => (
-                                  <a
-                                    key={child.maDanhMuc}
-                                    href={`#category-${child.maDanhMuc}`}
-                                    className="dropdown-item-child"
-                                    onClick={(e) => {
-                                      e.preventDefault();
-                                      setSelectedCategory(child.maDanhMuc);
-                                    }}
-                                  >
-                                    <div className="item-text">
-                                      <strong>{child.tenDanhMuc}</strong>
-                                      <span>{child.moTa || ""}</span>
-                                    </div>
-                                  </a>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
-                  </div>
-                </div>
-              </div>
-              <a href="#products">Sản phẩm</a>
-              <a href="#about">Về chúng tôi</a>
-              <a href="#contact">Liên hệ</a>
-            </div>
-
-            {user && (
-              <div className="user-menu">
-                <div className="user-avatar">
-                  {user.tenDangNhap?.charAt(0).toUpperCase()}
-                </div>
-                <div className="user-dropdown">
-                  <span className="user-name">{user.tenDangNhap}</span>
-                  {/* <span className="user-role">{user.vaiTro}</span> */}
-                </div>
-                <button onClick={logout} className="logout-btn">
-                  <svg
-                    width="20"
-                    height="20"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                  >
-                    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-                    <polyline points="16 17 21 12 16 7" />
-                    <line x1="21" y1="12" x2="9" y2="12" />
-                  </svg>
-                  Đăng xuất
-                </button>
-              </div>
-            )}
-          </div>
-        </nav>
-
         <div className="hero-content">
           <div className="hero-text">
             <h1 className="hero-title">
@@ -220,7 +90,7 @@ export const HomePage = () => {
               Khám phá bộ sưu tập giày dép cao cấp, thiết kế độc đáo, mang đến
               sự thoải mái và phong cách cho mọi bước chân của bạn.
             </p>
-            <div className="hero-actions">
+            {/* <div className="hero-actions">
               <a href="#products" className="btn-primary">
                 Khám phá ngay
                 <svg
@@ -238,7 +108,7 @@ export const HomePage = () => {
               <a href="#categories" className="btn-secondary">
                 Xem danh mục
               </a>
-            </div>
+            </div> */}
           </div>
           <div className="hero-image">
             <div className="floating-card card-1">
@@ -267,7 +137,6 @@ export const HomePage = () => {
       </header>
 
       <main className="main-content">
-        {/* Search Bar */}
         <section className="search-section">
           <div className="search-container">
             <svg
@@ -303,10 +172,59 @@ export const HomePage = () => {
         {/* Products Section */}
         <section id="products" className="section products-section">
           <div className="section-header">
-            <h2 className="section-title">Sản phẩm nổi bật</h2>
-            <p className="section-subtitle">
-              {filteredProducts.length} sản phẩm được tìm thấy
-            </p>
+            <div className="section-header-content">
+              <h2 className="section-title">Sản phẩm nổi bật</h2>
+              <p className="section-subtitle">
+                {filteredProducts.length} sản phẩm được tìm thấy
+              </p>
+            </div>
+            {(selectedCategory !== null || searchTerm) && (
+              <div className="active-filters">
+                {selectedCategory !== null && (
+                  <div className="filter-badge">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <rect x="3" y="3" width="7" height="7"/>
+                      <rect x="14" y="3" width="7" height="7"/>
+                    </svg>
+                    Danh mục #{selectedCategory}
+                    <button
+                      className="remove-filter"
+                      onClick={() => {
+                        setSelectedCategory(null);
+                        window.history.pushState({}, '', '/');
+                      }}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                )}
+                {searchTerm && (
+                  <div className="filter-badge">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <circle cx="11" cy="11" r="8"/>
+                      <path d="m21 21-4.35-4.35"/>
+                    </svg>
+                    "{searchTerm}"
+                    <button
+                      className="remove-filter"
+                      onClick={() => setSearchTerm("")}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                )}
+                <button
+                  className="clear-all-filters"
+                  onClick={() => {
+                    setSearchTerm("");
+                    setSelectedCategory(null);
+                    window.history.pushState({}, '', '/');
+                  }}
+                >
+                  Xóa tất cả bộ lọc
+                </button>
+              </div>
+            )}
           </div>
 
           {loading && (
@@ -344,100 +262,116 @@ export const HomePage = () => {
           )}
 
           <div className="products-grid">
-            {filteredProducts.map((product) => (
-              <div key={product.maSanPham} className="product-card">
-                <div className="product-image">
-                  {product.chiTietSanPham?.hinhAnhChinh ? (
-                    <img
-                      src={product.chiTietSanPham?.hinhAnhChinh}
-                      alt={product.tenSanPham}
-                    />
-                  ) : (
-                    <div className="product-image-placeholder">
-                      <svg
-                        width="64"
-                        height="64"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="1.5"
-                      >
-                        <rect x="3" y="3" width="18" height="18" rx="2" />
-                        <circle cx="8.5" cy="8.5" r="1.5" />
-                        <path d="m21 15-5-5L5 21" />
-                      </svg>
+            {filteredProducts.map((product) => {
+              const detail = product.chiTietSanPhams && product.chiTietSanPhams.length > 0 ? product.chiTietSanPhams[0] : undefined;
+              return (
+                <a
+                  key={product.maSanPham}
+                  className="product-card-link"
+                  href={`/product/${product.maSanPham}`}
+                  style={{ textDecoration: "none", color: "inherit" }}
+                >
+                  <div className="product-card">
+                    <div className="product-image">
+                      {detail?.hinhAnhChinh ? (
+                        <img
+                          src={detail.hinhAnhChinh}
+                          alt={product.tenSanPham}
+                        />
+                      ) : (
+                        <div className="product-image-placeholder">
+                          <svg
+                            width="64"
+                            height="64"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="1.5"
+                          >
+                            <rect x="3" y="3" width="18" height="18" rx="2" />
+                            <circle cx="8.5" cy="8.5" r="1.5" />
+                            <path d="m21 15-5-5L5 21" />
+                          </svg>
+                        </div>
+                      )}
+                      <div className="product-badge">Mới</div>
                     </div>
-                  )}
-                  <div className="product-badge">Mới</div>
-                </div>
 
-                <div className="product-details">
-                  <h3 className="product-name">{product.tenSanPham}</h3>
+                    <div className="product-details">
+                      <h3 className="product-name">{product.tenSanPham}</h3>
 
-                  {product.moTa && (
-                    <p className="product-description">{product.moTa}</p>
-                  )}
+                      {product.moTa && (
+                        <p className="product-description">{product.moTa}</p>
+                      )}
 
-                  <div className="product-meta">
-                    {product.chiTietSanPham?.mauSac && (
-                      <span className="meta-item">
-                        <svg
-                          width="16"
-                          height="16"
-                          viewBox="0 0 24 24"
-                          fill="currentColor"
-                        >
-                          <circle cx="12" cy="12" r="10" />
-                        </svg>
-                        {product.chiTietSanPham?.mauSac}
-                      </span>
-                    )}
-                    {product.chiTietSanPham?.size && (
-                      <span className="meta-item">
-                        <svg
-                          width="16"
-                          height="16"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                        >
-                          <path d="M12 2v20M2 12h20" />
-                        </svg>
-                        Size {product.chiTietSanPham?.size}
-                      </span>
-                    )}
-                  </div>
-
-                  <div className="product-footer">
-                    <div className="product-price">
-                      <span className="price-label">Giá:</span>
-                      <span className="price-value">
-                        {product.chiTietSanPham?.giaBan?.toLocaleString(
-                          "vi-VN",
+                      {/* <div className="product-meta">
+                        {detail?.mauSac && (
+                          <span className="meta-item">
+                            <svg
+                              width="16"
+                              height="16"
+                              viewBox="0 0 24 24"
+                              fill="currentColor"
+                            >
+                              <circle cx="12" cy="12" r="10" />
+                            </svg>
+                            {detail.mauSac}
+                          </span>
                         )}
-                        ₫
-                      </span>
+                        {detail?.size && (
+                          <span className="meta-item">
+                            <svg
+                              width="16"
+                              height="16"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2"
+                            >
+                              <path d="M12 2v20M2 12h20" />
+                            </svg>
+                            Size {detail.size}
+                          </span>
+                        )}
+                      </div> */}
+
+                      <div className="product-footer">
+                        <div className="product-price">
+                          <span className="price-label">Giá:</span>
+                          <span className="price-value">
+                            {detail?.giaBan?.toLocaleString("vi-VN")}
+                            ₫
+                          </span>
+                        </div>
+                        <button
+                          className="btn-add-cart"
+                          disabled={cartLoading}
+                          onClick={async (e) => {
+                            e.preventDefault();
+                            if (!detail?.maChiTiet) return;
+                            await addToCart(detail.maChiTiet, 1);
+                          }}
+                        >
+                          <svg
+                            width="20"
+                            height="20"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                          >
+                            <circle cx="9" cy="21" r="1" />
+                            <circle cx="20" cy="21" r="1" />
+                            <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
+                          </svg>
+                          Thêm vào giỏ
+                        </button>
+                      </div>
                     </div>
-                    <button className="btn-add-cart">
-                      <svg
-                        width="20"
-                        height="20"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                      >
-                        <circle cx="9" cy="21" r="1" />
-                        <circle cx="20" cy="21" r="1" />
-                        <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
-                      </svg>
-                      Thêm vào giỏ
-                    </button>
                   </div>
-                </div>
-              </div>
-            ))}
+                </a>
+              );
+            })}
           </div>
         </section>
 

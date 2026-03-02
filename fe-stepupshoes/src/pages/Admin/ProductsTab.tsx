@@ -31,8 +31,19 @@ interface Product {
   trangThai: boolean;
   ngayTao?: string;
   ngayCapNhat?: string;
-  chiTietSanPham: ProductDetail;
+  chiTietSanPhams: ProductDetail[];
 }
+
+const defaultVariant: ProductDetail = {
+  maSKU: "",
+  mauSac: "",
+  size: "",
+  giaBan: 0,
+  soLuongTon: 0,
+  trangThai: true,
+  hinhAnhChinh: "",
+  hinhAnhs: [],
+};
 
 const defaultForm: Partial<Product> = {
   tenSanPham: "",
@@ -41,16 +52,7 @@ const defaultForm: Partial<Product> = {
   maDanhMuc: 1,
   giaCoBan: 0,
   trangThai: true,
-  chiTietSanPham: {
-    maSKU: "",
-    mauSac: "",
-    size: "",
-    giaBan: 0,
-    soLuongTon: 0,
-    trangThai: true,
-    hinhAnhChinh: "",
-    hinhAnhs: [],
-  },
+  chiTietSanPhams: [{ ...defaultVariant }],
 };
 
 const ProductsTab = () => {
@@ -63,6 +65,7 @@ const ProductsTab = () => {
   const [loading, setLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState<Partial<Product>>(defaultForm);
+  const [variantIndex, setVariantIndex] = useState(0);
   const [editId, setEditId] = useState<number | null>(null);
   const [currentStep, setCurrentStep] = useState(1);
 
@@ -70,13 +73,15 @@ const ProductsTab = () => {
   const [filterCategory, setFilterCategory] = useState<number | "">("");
   const [filterStatus, setFilterStatus] = useState<boolean | "">("");
   const [imageInputs, setImageInputs] = useState<string[]>([]);
+
   useEffect(() => {
-    if (showModal && form.chiTietSanPham?.hinhAnhs) {
-      setImageInputs(form.chiTietSanPham.hinhAnhs.map((h) => h.duongDan));
+    if (showModal && form.chiTietSanPhams && form.chiTietSanPhams[variantIndex]?.hinhAnhs) {
+      setImageInputs(form.chiTietSanPhams[variantIndex].hinhAnhs!.map((h) => h.duongDan));
     } else if (showModal) {
       setImageInputs([]);
     }
-  }, [showModal, form.chiTietSanPham]);
+  }, [showModal, form.chiTietSanPhams, variantIndex]);
+
   const handleAddImageInput = () => setImageInputs((prev) => [...prev, ""]);
   const handleRemoveImageInput = (idx: number) =>
     setImageInputs((prev) => prev.filter((_, i) => i !== idx));
@@ -125,9 +130,7 @@ const ProductsTab = () => {
   }, [searchTerm, filterCategory, filterStatus, products]);
 
   const handleInputChange = (
-    e: React.ChangeEvent<
-      HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement
-    >,
+    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>,
   ) => {
     const { name, value, type } = e.target;
     const checked = (e.target as HTMLInputElement).checked;
@@ -140,54 +143,56 @@ const ProductsTab = () => {
   const handleDetailChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value, type } = e.target;
     const checked = (e.target as HTMLInputElement).checked;
-    setForm((prev) => ({
-      ...prev,
-      chiTietSanPham: {
-        ...(prev.chiTietSanPham || defaultForm.chiTietSanPham!),
-        [name]:
-          type === "checkbox"
-            ? checked
-            : type === "number"
-              ? Number(value)
-              : value,
-      },
-    }));
+    setForm((prev) => {
+      const variants = prev.chiTietSanPhams ? [...prev.chiTietSanPhams] : [{ ...defaultVariant }];
+      variants[variantIndex] = {
+        ...variants[variantIndex],
+        [name]: type === "checkbox" ? checked : type === "number" ? Number(value) : value,
+      };
+      return { ...prev, chiTietSanPhams: variants };
+    });
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (currentStep < 2) {
-      return;
-    }
+  const validateForm = (): boolean => {
     if (!form.tenSanPham?.trim()) {
       showToast("Vui lòng nhập tên sản phẩm", "warning");
-      return;
+      return false;
     }
-    if (!form.chiTietSanPham?.maSKU?.trim()) {
-      showToast("Vui lòng nhập SKU cho sản phẩm", "warning");
-      return;
+    if (!form.chiTietSanPhams || form.chiTietSanPhams.length === 0) {
+      showToast("Vui lòng thêm ít nhất một biến thể sản phẩm", "warning");
+      return false;
     }
-    if (
-      !form.chiTietSanPham?.mauSac?.trim() ||
-      !form.chiTietSanPham?.size?.trim()
-    ) {
-      showToast("Vui lòng nhập đầy đủ màu sắc và size", "warning");
-      return;
+    for (const v of form.chiTietSanPhams) {
+      if (!v.maSKU?.trim()) {
+        showToast("Vui lòng nhập SKU cho tất cả biến thể", "warning");
+        return false;
+      }
+      if (!v.mauSac?.trim() || !v.size?.trim()) {
+        showToast("Vui lòng nhập đầy đủ màu sắc và size cho tất cả biến thể", "warning");
+        return false;
+      }
     }
-    const hinhAnhs: HinhAnhChiTietDTO[] = imageInputs
-      .filter((url) => url.trim() !== "")
-      .map((url, idx) => ({
-        duongDan: url,
-        thuTu: idx + 1,
-        laAnhChinh: false,
-      }));
-    const submitForm = {
-      ...form,
-      chiTietSanPham: {
-        ...(form.chiTietSanPham || {}),
-        hinhAnhs,
-      },
-    };
+    return true;
+  };
+
+  const handleSubmitProduct = async () => {
+    // Chỉ được gọi từ nút "Cập nhật" ở bước 2
+    if (currentStep !== 2) return;
+    
+    if (!validateForm()) return;
+
+    const variants = form.chiTietSanPhams!.map((v, idx) =>
+      idx === variantIndex
+        ? {
+            ...v,
+            hinhAnhs: imageInputs
+              .filter((url) => url.trim() !== "")
+              .map((url, i) => ({ duongDan: url, thuTu: i + 1, laAnhChinh: false })),
+          }
+        : v,
+    );
+    const submitForm = { ...form, chiTietSanPhams: variants };
+
     setLoading(true);
     try {
       if (editId) {
@@ -199,31 +204,38 @@ const ProductsTab = () => {
       }
       closeModal();
       fetchProducts();
-    } catch (error) {
+    } catch {
       showToast("Có lỗi xảy ra. Vui lòng thử lại!", "error");
     }
     setLoading(false);
   };
 
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    // Ngăn form submit, chỉ cho phép gọi API qua nút "Cập nhật"
+  };
+
   const handleEdit = (product: Product) => {
     setForm({
       ...product,
-      chiTietSanPham: product.chiTietSanPham || defaultForm.chiTietSanPham!,
+      chiTietSanPhams:
+        product.chiTietSanPhams && product.chiTietSanPhams.length > 0
+          ? product.chiTietSanPhams
+          : [{ ...defaultVariant }],
     });
     setEditId(product.maSanPham);
     setCurrentStep(1);
     setShowModal(true);
+    setVariantIndex(0);
     setImageInputs(
-      product.chiTietSanPham?.hinhAnhs?.map((h) => h.duongDan) || [],
+      product.chiTietSanPhams?.[0]?.hinhAnhs
+        ? product.chiTietSanPhams[0].hinhAnhs.map((h) => h.duongDan)
+        : [],
     );
   };
 
   const handleDelete = async (id: number) => {
-    if (
-      !window.confirm(
-        "Bạn có chắc muốn xóa sản phẩm này? Hành động này không thể hoàn tác.",
-      )
-    )
+    if (!window.confirm("Bạn có chắc muốn xóa sản phẩm này? Hành động này không thể hoàn tác."))
       return;
     setLoading(true);
     try {
@@ -264,6 +276,7 @@ const ProductsTab = () => {
 
   return (
     <div className="products-tab-improved">
+      {/* Page Header */}
       <div className="page-header">
         <h2>Quản lý sản phẩm</h2>
         <button
@@ -278,6 +291,7 @@ const ProductsTab = () => {
         </button>
       </div>
 
+      {/* Filters */}
       <div className="filters-section">
         <div className="search-box">
           <input
@@ -292,9 +306,7 @@ const ProductsTab = () => {
           className="filter-select"
           value={filterCategory}
           onChange={(e) =>
-            setFilterCategory(
-              e.target.value === "" ? "" : Number(e.target.value),
-            )
+            setFilterCategory(e.target.value === "" ? "" : Number(e.target.value))
           }
         >
           <option value="">Tất cả danh mục</option>
@@ -309,9 +321,7 @@ const ProductsTab = () => {
           className="filter-select"
           value={filterStatus === "" ? "" : filterStatus.toString()}
           onChange={(e) =>
-            setFilterStatus(
-              e.target.value === "" ? "" : e.target.value === "true",
-            )
+            setFilterStatus(e.target.value === "" ? "" : e.target.value === "true")
           }
         >
           <option value="">Tất cả trạng thái</option>
@@ -321,24 +331,19 @@ const ProductsTab = () => {
       </div>
 
       <div className="results-info">
-        Hiển thị <strong>{filteredProducts.length}</strong> / {products.length}{" "}
-        sản phẩm
+        Hiển thị <strong>{filteredProducts.length}</strong> / {products.length} sản phẩm
       </div>
 
       {/* Modal */}
       {showModal && (
-        <div className="modal-overlay" onClick={closeModal}>
-          <div
-            className="modal-content-improved"
-            onClick={(e) => e.stopPropagation()}
-          >
+        <div className="modal-overlay">
+          <div className="modal-content-improved">
             <div className="modal-header">
               <h3>{editId ? "Chỉnh sửa sản phẩm" : "Thêm sản phẩm mới"}</h3>
-              <button className="close-btn" onClick={closeModal}>
-                ✕
-              </button>
+              <button className="close-btn" onClick={closeModal}>✕</button>
             </div>
 
+            {/* Step Indicator */}
             <div className="step-indicator">
               <div className={`step ${currentStep >= 1 ? "active" : ""}`}>
                 <div className="step-number">1</div>
@@ -355,17 +360,14 @@ const ProductsTab = () => {
               className="product-form-improved"
               onSubmit={handleSubmit}
               onKeyDown={(e) => {
-                if (e.key === "Enter" && currentStep < 2) {
-                  e.preventDefault();
-                }
+                if (e.key === "Enter" && currentStep < 2) e.preventDefault();
               }}
             >
+              {/* Step 1: Basic Info */}
               {currentStep === 1 && (
                 <div className="form-step">
                   <div className="form-group">
-                    <label>
-                      Tên sản phẩm <span className="required">*</span>
-                    </label>
+                    <label>Tên sản phẩm <span className="required">*</span></label>
                     <input
                       name="tenSanPham"
                       value={form.tenSanPham || ""}
@@ -374,7 +376,16 @@ const ProductsTab = () => {
                       required
                     />
                   </div>
-
+                  <div className="form-group">
+                    <label>Mô tả</label>
+                    <textarea
+                      name="moTa"
+                      value={form.moTa || ""}
+                      onChange={handleInputChange}
+                      placeholder="Nhập mô tả sản phẩm"
+                      rows={3}
+                    />
+                  </div>
                   <div className="form-row">
                     <div className="form-group">
                       <label>Thương hiệu</label>
@@ -382,21 +393,18 @@ const ProductsTab = () => {
                         name="thuongHieu"
                         value={form.thuongHieu || ""}
                         onChange={handleInputChange}
-                        placeholder="Nhập thương hiệu"
+                        placeholder="VD: Nike, Adidas..."
                       />
                     </div>
-
                     <div className="form-group">
-                      <label>
-                        Danh mục <span className="required">*</span>
-                      </label>
+                      <label>Danh mục <span className="required">*</span></label>
                       <select
                         name="maDanhMuc"
                         value={form.maDanhMuc || ""}
                         onChange={handleInputChange}
                         required
                       >
-                        <option value="">-- Chọn danh mục --</option>
+                        <option value="">Chọn danh mục</option>
                         {categories.map((cat) => (
                           <option key={cat.maDanhMuc} value={cat.maDanhMuc}>
                             {cat.tenDanhMuc}
@@ -405,18 +413,6 @@ const ProductsTab = () => {
                       </select>
                     </div>
                   </div>
-
-                  <div className="form-group">
-                    <label>Mô tả sản phẩm</label>
-                    <textarea
-                      name="moTa"
-                      value={form.moTa || ""}
-                      onChange={handleInputChange}
-                      placeholder="Nhập mô tả chi tiết về sản phẩm"
-                      rows={4}
-                    />
-                  </div>
-
                   <div className="form-row">
                     <div className="form-group">
                       <label>Giá cơ bản (VNĐ)</label>
@@ -429,7 +425,6 @@ const ProductsTab = () => {
                         min="0"
                       />
                     </div>
-
                     <div className="form-group">
                       <label className="checkbox-label">
                         <input
@@ -445,43 +440,123 @@ const ProductsTab = () => {
                 </div>
               )}
 
+              {/* Step 2: Variants */}
               {currentStep === 2 && (
                 <div className="form-step">
-                  <h4>Chi tiết sản phẩm</h4>
+                  {/* Variant Tabs */}
+                  <div style={{ marginBottom: 12 }}>
+                    <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                      <span>Biến thể:</span>
+                      {form.chiTietSanPhams?.map((v, idx) => (
+                        <button
+                          key={idx}
+                          type="button"
+                          style={{
+                            padding: "2px 8px",
+                            borderRadius: 4,
+                            border: idx === variantIndex ? "2px solid #007bff" : "1px solid #ccc",
+                            background: idx === variantIndex ? "#eaf4ff" : "#fff",
+                            cursor: "pointer",
+                          }}
+                          onClick={() => {
+                            setForm((prev) => {
+                              const variants = prev.chiTietSanPhams ? [...prev.chiTietSanPhams] : [];
+                              variants[variantIndex] = {
+                                ...variants[variantIndex],
+                                hinhAnhs: imageInputs
+                                  .filter((url) => url.trim() !== "")
+                                  .map((url, i) => ({ duongDan: url, thuTu: i + 1, laAnhChinh: false })),
+                              };
+                              return { ...prev, chiTietSanPhams: variants };
+                            });
+                            setVariantIndex(idx);
+                          }}
+                        >
+                          #{idx + 1}
+                        </button>
+                      ))}
+                      <button
+                        type="button"
+                        style={{
+                          marginLeft: 8,
+                          padding: "2px 8px",
+                          borderRadius: 4,
+                          border: "1px solid #28a745",
+                          background: "#eaffea",
+                          color: "#28a745",
+                        }}
+                        onClick={() => {
+                          setForm((prev) => ({
+                            ...prev,
+                            chiTietSanPhams: [...(prev.chiTietSanPhams || []), { ...defaultVariant }],
+                          }));
+                          setVariantIndex(form.chiTietSanPhams ? form.chiTietSanPhams.length : 0);
+                          setImageInputs([]);
+                        }}
+                      >
+                        + Thêm biến thể
+                      </button>
+                      {form.chiTietSanPhams && form.chiTietSanPhams.length > 1 && (
+                        <button
+                          type="button"
+                          style={{
+                            marginLeft: 8,
+                            padding: "2px 8px",
+                            borderRadius: 4,
+                            border: "1px solid #dc3545",
+                            background: "#ffeaea",
+                            color: "#dc3545",
+                          }}
+                          onClick={() => {
+                            if (window.confirm("Xóa biến thể này?")) {
+                              setForm((prev) => {
+                                const variants = prev.chiTietSanPhams ? [...prev.chiTietSanPhams] : [];
+                                variants.splice(variantIndex, 1);
+                                return { ...prev, chiTietSanPhams: variants };
+                              });
+                              setVariantIndex(0);
+                              setImageInputs(
+                                form.chiTietSanPhams?.[0]?.hinhAnhs
+                                  ? form.chiTietSanPhams[0].hinhAnhs.map((h) => h.duongDan)
+                                  : [],
+                              );
+                            }
+                          }}
+                        >
+                          Xóa biến thể
+                        </button>
+                      )}
+                    </div>
+                  </div>
 
+                  {/* Variant Fields */}
                   <div className="detail-form-single">
                     <div className="form-row">
                       <div className="form-group">
-                        <label>
-                          SKU <span className="required">*</span>
-                        </label>
+                        <label>SKU <span className="required">*</span></label>
                         <input
                           name="maSKU"
-                          value={form.chiTietSanPham?.maSKU || ""}
+                          value={form.chiTietSanPhams?.[variantIndex]?.maSKU || ""}
                           onChange={handleDetailChange}
                           placeholder="VD: SP001-RED-M"
                           required
                         />
                       </div>
                       <div className="form-group">
-                        <label>
-                          Màu sắc <span className="required">*</span>
-                        </label>
+                        <label>Màu sắc <span className="required">*</span></label>
                         <input
                           name="mauSac"
-                          value={form.chiTietSanPham?.mauSac || ""}
+                          value={form.chiTietSanPhams?.[variantIndex]?.mauSac || ""}
                           onChange={handleDetailChange}
                           placeholder="VD: Đỏ"
                           required
                         />
                       </div>
                       <div className="form-group">
-                        <label>
-                          Size <span className="required">*</span>
-                        </label>
+                        <label>Size <span className="required">*</span></label>
                         <input
                           name="size"
-                          value={form.chiTietSanPham?.size || ""}
+                          value={form.chiTietSanPhams?.[variantIndex]?.size || ""}
                           onChange={handleDetailChange}
                           placeholder="VD: M, L, XL"
                           required
@@ -491,13 +566,11 @@ const ProductsTab = () => {
 
                     <div className="form-row">
                       <div className="form-group">
-                        <label>
-                          Giá bán (VNĐ) <span className="required">*</span>
-                        </label>
+                        <label>Giá bán (VNĐ) <span className="required">*</span></label>
                         <input
                           name="giaBan"
                           type="number"
-                          value={form.chiTietSanPham?.giaBan || 0}
+                          value={form.chiTietSanPhams?.[variantIndex]?.giaBan || 0}
                           onChange={handleDetailChange}
                           placeholder="0"
                           min="0"
@@ -509,7 +582,7 @@ const ProductsTab = () => {
                         <input
                           name="soLuongTon"
                           type="number"
-                          value={form.chiTietSanPham?.soLuongTon || 0}
+                          value={form.chiTietSanPhams?.[variantIndex]?.soLuongTon || 0}
                           onChange={handleDetailChange}
                           placeholder="0"
                           min="0"
@@ -520,7 +593,7 @@ const ProductsTab = () => {
                           <input
                             name="trangThai"
                             type="checkbox"
-                            checked={form.chiTietSanPham?.trangThai ?? true}
+                            checked={form.chiTietSanPhams?.[variantIndex]?.trangThai ?? true}
                             onChange={handleDetailChange}
                           />
                           <span>Còn hàng</span>
@@ -532,24 +605,20 @@ const ProductsTab = () => {
                       <label>URL hình ảnh chính</label>
                       <input
                         name="hinhAnhChinh"
-                        value={form.chiTietSanPham?.hinhAnhChinh || ""}
+                        value={form.chiTietSanPhams?.[variantIndex]?.hinhAnhChinh || ""}
                         onChange={handleDetailChange}
                         placeholder="https://example.com/image.jpg"
                       />
                     </div>
+
                     <div className="form-group">
                       <label>Ảnh phụ (URL, có thể nhiều)</label>
                       {imageInputs.map((url, idx) => (
-                        <div
-                          key={idx}
-                          style={{ display: "flex", gap: 8, marginBottom: 4 }}
-                        >
+                        <div key={idx} style={{ display: "flex", gap: 8, marginBottom: 4 }}>
                           <input
                             type="text"
                             value={url}
-                            onChange={(e) =>
-                              handleImageInputChange(idx, e.target.value)
-                            }
+                            onChange={(e) => handleImageInputChange(idx, e.target.value)}
                             placeholder={`URL ảnh phụ #${idx + 1}`}
                           />
                           <button
@@ -561,104 +630,81 @@ const ProductsTab = () => {
                           </button>
                         </div>
                       ))}
-                      <button
-                        type="button"
-                        className="add-image-btn"
-                        onClick={handleAddImageInput}
-                      >
+                      <button type="button" className="add-image-btn" onClick={handleAddImageInput}>
                         + Thêm ảnh phụ
                       </button>
                     </div>
 
                     {/* Preview */}
-                    {form.chiTietSanPham && (
+                    {form.chiTietSanPhams && (
                       <div className="detail-preview">
-                        <h5>Xem trước chi tiết sản phẩm</h5>
+                        <h5>Xem trước chi tiết biến thể</h5>
                         <div className="preview-card">
                           <div className="preview-header">
                             <span className="preview-sku">
-                              {form.chiTietSanPham.maSKU || "SKU chưa có"}
+                              {form.chiTietSanPhams[variantIndex]?.maSKU || "SKU chưa có"}
                             </span>
                             <span
-                              className={`preview-status ${form.chiTietSanPham.trangThai ? "active" : "inactive"}`}
+                              className={`preview-status ${
+                                form.chiTietSanPhams[variantIndex]?.trangThai ? "active" : "inactive"
+                              }`}
                             >
-                              {form.chiTietSanPham.trangThai
-                                ? "● Còn hàng"
-                                : "○ Hết hàng"}
+                              {form.chiTietSanPhams[variantIndex]?.trangThai ? "● Còn hàng" : "○ Hết hàng"}
                             </span>
                           </div>
-                          <div className="preview-details">
+                          <div className="preview-details-grid">
                             <div className="preview-item">
                               <span className="preview-label">Màu sắc:</span>
-                              <strong>
-                                {form.chiTietSanPham.mauSac || "-"}
-                              </strong>
+                              <strong>{form.chiTietSanPhams[variantIndex]?.mauSac || "-"}</strong>
                             </div>
                             <div className="preview-item">
                               <span className="preview-label">Size:</span>
-                              <strong>{form.chiTietSanPham.size || "-"}</strong>
+                              <strong>{form.chiTietSanPhams[variantIndex]?.size || "-"}</strong>
                             </div>
                             <div className="preview-item">
                               <span className="preview-label">Giá bán:</span>
                               <strong>
-                                {form.chiTietSanPham.giaBan?.toLocaleString() ||
-                                  0}{" "}
-                                đ
+                                {form.chiTietSanPhams[variantIndex]?.giaBan?.toLocaleString() || 0} đ
                               </strong>
                             </div>
                             <div className="preview-item">
                               <span className="preview-label">Tồn kho:</span>
-                              <strong>
-                                {form.chiTietSanPham.soLuongTon || 0}
-                              </strong>
+                              <strong>{form.chiTietSanPhams[variantIndex]?.soLuongTon || 0}</strong>
                             </div>
                           </div>
-                          {form.chiTietSanPham.hinhAnhChinh && (
-                            <div className="preview-image">
-                              <img
-                                src={form.chiTietSanPham.hinhAnhChinh}
-                                alt="Preview"
-                                onError={(e) => {
-                                  (e.target as HTMLImageElement).style.display =
-                                    "none";
-                                }}
-                              />
-                            </div>
-                          )}
-                          {imageInputs.length > 0 && (
-                            <div style={{ marginTop: 8 }}>
-                              <div>Ảnh phụ:</div>
-                              <div
-                                style={{
-                                  display: "flex",
-                                  gap: 8,
-                                  flexWrap: "wrap",
-                                }}
-                              >
-                                {imageInputs.map((url, idx) =>
-                                  url ? (
-                                    <img
-                                      key={idx}
-                                      src={url}
-                                      alt={`Ảnh phụ #${idx + 1}`}
-                                      style={{
-                                        width: 60,
-                                        height: 60,
-                                        objectFit: "cover",
-                                        borderRadius: 4,
-                                        border: "1px solid #eee",
-                                      }}
-                                      onError={(e) => {
-                                        (
-                                          e.target as HTMLImageElement
-                                        ).style.display = "none";
-                                      }}
-                                    />
-                                  ) : null,
-                                )}
+                          <div className="preview-images-flex">
+                            {form.chiTietSanPhams[variantIndex]?.hinhAnhChinh && (
+                              <div className="preview-image">
+                                <img
+                                  src={form.chiTietSanPhams[variantIndex]?.hinhAnhChinh}
+                                  alt="Preview"
+                                  onError={(e) => {
+                                    (e.target as HTMLImageElement).style.display = "none";
+                                  }}
+                                />
                               </div>
-                            </div>
-                          )}
+                            )}
+                            {imageInputs.length > 0 && (
+                              <div className="preview-sub-images">
+                                <div>Ảnh phụ:</div>
+                                <div className="preview-sub-images-list">
+                                  {imageInputs.map((url, idx) =>
+                                    url ? (
+                                      <img
+                                        key={idx}
+                                        src={url}
+                                        alt={`Ảnh phụ #${idx + 1}`}
+                                        className="preview-sub-image"
+                                        onError={(e) => {
+                                          (e.target as HTMLImageElement).style.display = "none";
+                                        }}
+                                      />
+                                    ) : null,
+                                  )}
+                                </div>
+                              </div>
+                            )}
+                          </div>
                         </div>
                       </div>
                     )}
@@ -666,48 +712,22 @@ const ProductsTab = () => {
                 </div>
               )}
 
-              {/* Form actions */}
+              {/* Form Actions */}
               <div className="form-actions">
                 {currentStep > 1 && (
-                  <button
-                    type="button"
-                    className="btn-secondary"
-                    onClick={prevStep}
-                  >
+                  <button type="button" className="btn-secondary" onClick={prevStep}>
                     ← Quay lại
                   </button>
                 )}
                 {currentStep < 2 ? (
-                  <button
-                    type="button"
-                    className="btn-primary"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      nextStep();
-                    }}
-                  >
+                  <button type="button" className="btn-primary" onClick={nextStep}>
                     Tiếp theo →
                   </button>
                 ) : (
-                  <button
-                    type="submit"
-                    className="btn-primary"
-                    disabled={loading}
-                  >
-                    {loading
-                      ? "Đang xử lý..."
-                      : editId
-                        ? "Cập nhật sản phẩm"
-                        : "Tạo sản phẩm"}
+                  <button type="button" className="btn-primary" onClick={handleSubmitProduct} disabled={loading}>
+                    {loading ? "Đang lưu..." : editId ? "Cập nhật" : "Thêm sản phẩm"}
                   </button>
                 )}
-                <button
-                  type="button"
-                  className="btn-cancel"
-                  onClick={closeModal}
-                >
-                  Hủy
-                </button>
               </div>
             </form>
           </div>
@@ -733,12 +753,7 @@ const ProductsTab = () => {
                 <th>Tên sản phẩm</th>
                 <th>Thương hiệu</th>
                 <th>Danh mục</th>
-                <th>SKU</th>
-                <th>Màu</th>
-                <th>Size</th>
-
-                <th>Giá bán</th>
-                <th>Tồn kho</th>
+                <th>Biến thể</th>
                 <th>Trạng thái</th>
                 <th>Hành động</th>
               </tr>
@@ -747,9 +762,9 @@ const ProductsTab = () => {
               {filteredProducts.map((p) => (
                 <tr key={p.maSanPham}>
                   <td>
-                    {p.chiTietSanPham?.hinhAnhChinh ? (
+                    {p.chiTietSanPhams?.[0]?.hinhAnhChinh ? (
                       <img
-                        src={p.chiTietSanPham.hinhAnhChinh}
+                        src={p.chiTietSanPhams[0].hinhAnhChinh}
                         alt={p.tenSanPham}
                         style={{
                           width: 48,
@@ -774,43 +789,29 @@ const ProductsTab = () => {
                   <td>{p.thuongHieu || "-"}</td>
                   <td>{getCategoryName(p.maDanhMuc)}</td>
                   <td>
-                    <span className="sku-badge">
-                      {p.chiTietSanPham?.maSKU || "-"}
-                    </span>
+                    {p.chiTietSanPhams && p.chiTietSanPhams.length > 0 ? (
+                      <ul style={{ paddingLeft: 16, margin: 0 }}>
+                        {p.chiTietSanPhams.map((v, idx) => (
+                          <li key={idx} style={{ marginBottom: 4 }}>
+                            <span className="sku-badge">{v.maSKU}</span> |{" "}
+                            <span>{v.mauSac}</span> |{" "}
+                            <span>{v.size}</span> |{" "}
+                            <span>{v.giaBan?.toLocaleString()} đ</span> |{" "}
+                            <span>{v.soLuongTon} tồn</span>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <span>-</span>
+                    )}
                   </td>
                   <td>
-                    <div className="variant-info-cell">
-                      <span>{p.chiTietSanPham?.mauSac || "-"}</span>
-                    </div>
-                  </td>
-                  <td>
-                    <div className="variant-info-cell">
-                      <span>{p.chiTietSanPham?.size || "-"}</span>
-                    </div>
-                  </td>
-                  <td className="price-cell">
-                    {p.chiTietSanPham?.giaBan?.toLocaleString() || 0} đ
-                  </td>
-                  <td>
-                    <span
-                      className={`stock-badge ${(p.chiTietSanPham?.soLuongTon || 0) > 0 ? "in-stock" : "out-of-stock"}`}
-                    >
-                      {p.chiTietSanPham?.soLuongTon || 0}
-                    </span>
-                  </td>
-                  <td>
-                    <span
-                      className={`badge ${p.trangThai ? "badge-success" : "badge-danger"}`}
-                    >
+                    <span className={`badge ${p.trangThai ? "badge-success" : "badge-danger"}`}>
                       {p.trangThai ? "Kinh doanh" : "Ngừng"}
                     </span>
                   </td>
                   <td className="actions">
-                    <button
-                      className="btn-edit"
-                      onClick={() => handleEdit(p)}
-                      title="Chỉnh sửa"
-                    >
+                    <button className="btn-edit" onClick={() => handleEdit(p)} title="Chỉnh sửa">
                       Sửa
                     </button>
                     <button
