@@ -33,8 +33,21 @@ public class DanhGia {
     private String noiDung;
 
     @Column(name = "TrangThai")
+    @Builder.Default
     private Boolean trangThai = true;
 
     @Column(name = "NgayDanhGia")
+    @Builder.Default
     private LocalDateTime ngayDanhGia = LocalDateTime.now();
+
+    @Column(name = "DaXoa")
+    @Builder.Default
+    private Boolean daXoa = false;
+
+    @Column(name = "NgayXoa")
+    private LocalDateTime ngayXoa;
+
+    @ManyToOne
+    @JoinColumn(name = "NguoiXoa")
+    private NguoiDung nguoiXoa;
 }

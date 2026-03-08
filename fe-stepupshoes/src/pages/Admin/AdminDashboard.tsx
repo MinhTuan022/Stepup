@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useLocation } from 'react-router-dom'
 import "./AdminDashboard.css";
 import { useAuth } from "../../context/AuthContext";
 import StatisticsTab from "./StatisticsTab";
@@ -27,11 +28,39 @@ const AdminDashboard = () => {
 
   const [activeTab, setActiveTab] = useState<TabType>(isEmployee ? "counter-order" : "products");
 
+  const location = useLocation()
+
   useEffect(() => {
     if (isEmployee && !["counter-order", "orders", "products"].includes(activeTab)) {
       setActiveTab("counter-order");
     }
   }, [user?.vaiTro, activeTab, isEmployee]);
+
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(location.search)
+      const tabFromQuery = params.get('tab') as TabType | null
+      const validTabs: TabType[] = [
+        'statistics','users','orders','vouchers','reviews','counter-order','danhmuc','products'
+      ]
+      if (tabFromQuery && validTabs.includes(tabFromQuery) && hasAccessToTab(tabFromQuery)) {
+        setActiveTab(tabFromQuery)
+      }
+    } catch (e) {
+    }
+  }, [location.search])
+
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(location.search)
+      if (params.get('tab') !== activeTab) {
+        params.set('tab', activeTab)
+        const newUrl = location.pathname + (params.toString() ? `?${params.toString()}` : '')
+        window.history.replaceState(null, '', newUrl)
+      }
+    } catch (e) {
+    }
+  }, [activeTab, location.pathname, location.search])
 
   const handleLogout = () => {
     logout();

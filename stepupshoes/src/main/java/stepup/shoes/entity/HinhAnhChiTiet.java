@@ -24,11 +24,25 @@ public class HinhAnhChiTiet {
     private String duongDan;
 
     @Column(name = "LaAnhChinh")
+    @Builder.Default
     private Boolean laAnhChinh = false;
 
     @Column(name = "ThuTu")
+    @Builder.Default
     private Integer thuTu = 0;
 
     @Column(name = "NgayTao")
+    @Builder.Default
     private LocalDateTime ngayTao = LocalDateTime.now();
+
+    @Column(name = "DaXoa")
+    @Builder.Default
+    private Boolean daXoa = false;
+
+    @Column(name = "NgayXoa")
+    private LocalDateTime ngayXoa;
+
+    @ManyToOne
+    @JoinColumn(name = "NguoiXoa")
+    private NguoiDung nguoiXoa;
 }

@@ -16,6 +16,7 @@ import stepup.shoes.repository.ChiTietSanPhamRepository;
 import stepup.shoes.repository.DonHangRepository;
 import stepup.shoes.repository.NguoiDungRepository;
 import stepup.shoes.repository.VoucherRepository;
+import stepup.shoes.repository.LichSuTrangThaiDonHangRepository;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -36,6 +37,7 @@ public class UserService {
     private final ChiTietDonHangRepository chiTietDonHangRepository;
     private final ChiTietSanPhamRepository chiTietSanPhamRepository;
     private final VoucherRepository voucherRepository;
+    private final LichSuTrangThaiDonHangRepository lichSuTrangThaiDonHangRepository;
     private final PasswordEncoder passwordEncoder;
 
     // ==================== USER PROFILE ====================
@@ -98,6 +100,59 @@ public class UserService {
         return convertToDonHangDTO(order);
     }
 
+
+    public DonHangDTO cancelOrder(Integer userId, Integer orderId, String lyDo) {
+        DonHang order = donHangRepository.findById(orderId)
+                .orElseThrow(() -> new ResourceNotFoundException("Đơn hàng không tồn tại"));
+
+        if (order.getNguoiDung() == null || !order.getNguoiDung().getMaNguoiDung().equals(userId)) {
+            throw new ResourceNotFoundException("Đơn hàng không thuộc về người dùng");
+        }
+
+        String current = order.getTrangThaiDonHang();
+
+        if (!TrangThaiDonHang.canCancel(current)) {
+            throw new IllegalArgumentException("Không thể hủy đơn hàng ở trạng thái hiện tại");
+        }
+
+        if (TrangThaiDonHang.CHO_XAC_NHAN.getCode().equals(current)) {
+            String prev = current;
+            order.setTrangThaiDonHang(TrangThaiDonHang.HUY.getCode());
+            order.setNgayCapNhat(LocalDateTime.now());
+
+            LichSuTrangThaiDonHang lichSu = new LichSuTrangThaiDonHang();
+            lichSu.setDonHang(order);
+            lichSu.setTrangThaiCu(prev);
+            lichSu.setTrangThaiMoi(TrangThaiDonHang.HUY.getCode());
+            lichSu.setGhiChu("Khách hàng hủy đơn");
+            lichSu.setNguoiCapNhat(order.getNguoiDung());
+            lichSuTrangThaiDonHangRepository.save(lichSu);
+
+            DonHang updated = donHangRepository.save(order);
+            return convertToDonHangDTO(updated);
+        }
+
+        if (TrangThaiDonHang.CHUAN_BI_HANG.getCode().equals(current)) {
+            order.setTrangThaiDonHang(TrangThaiDonHang.YEU_CAU_HUY.getCode());
+            order.setLyDoYeuCauHuy(lyDo != null && !lyDo.trim().isEmpty() ? lyDo.trim() : "Khách yêu cầu hủy");
+            order.setNgayYeuCauHuy(LocalDateTime.now());
+            order.setNgayCapNhat(LocalDateTime.now());
+
+            LichSuTrangThaiDonHang lichSu = new LichSuTrangThaiDonHang();
+            lichSu.setDonHang(order);
+            lichSu.setTrangThaiCu(current);
+            lichSu.setTrangThaiMoi(TrangThaiDonHang.YEU_CAU_HUY.getCode());
+            lichSu.setGhiChu("Khách gửi yêu cầu hủy: " + order.getLyDoYeuCauHuy());
+            lichSu.setNguoiCapNhat(order.getNguoiDung());
+            lichSuTrangThaiDonHangRepository.save(lichSu);
+
+            DonHang updated = donHangRepository.save(order);
+            return convertToDonHangDTO(updated);
+        }
+
+        throw new IllegalArgumentException("Yêu cầu hủy không hợp lệ");
+    }
+
     public Map<String, Object> getUserOrderStats(Integer userId) {
         NguoiDung user = nguoiDungRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("Người dùng không tồn tại"));
@@ -113,10 +168,10 @@ public class UserService {
                 .filter(o -> "huy".equals(o.getTrangThaiDonHang()))
                 .count());
         stats.put("processingOrders", allOrders.stream()
-                .filter(o -> "dat_hang".equals(o.getTrangThaiDonHang()) || 
-                             "xac_nhan".equals(o.getTrangThaiDonHang()) ||
-                             "dang_giao".equals(o.getTrangThaiDonHang()))
-                .count());
+            .filter(o -> "cho_xac_nhan".equals(o.getTrangThaiDonHang()) || 
+                     "chuan_bi_hang".equals(o.getTrangThaiDonHang()) ||
+                     "dang_giao_hang".equals(o.getTrangThaiDonHang()))
+            .count());
         stats.put("totalSpent", allOrders.stream()
                 .filter(o -> "hoan_thanh".equals(o.getTrangThaiDonHang()))
                 .map(DonHang::getThanhTien)
@@ -142,7 +197,7 @@ public class UserService {
         DonHang donHang = new DonHang();
         donHang.setNguoiDung(user);
         donHang.setLoaiDonHang("online");
-        donHang.setTrangThaiDonHang("dat_hang");
+        donHang.setTrangThaiDonHang("cho_xac_nhan");
         donHang.setTrangThaiThanhToan("chua_thanh_toan");
         donHang.setPhuongThucThanhToan("tien_mat"); // COD
         donHang.setDiaChiGiaoHang(requestDTO.getDiaChiGiaoHang());
@@ -181,9 +236,6 @@ public class UserService {
             
             chiTietDonHangRepository.save(chiTietDonHang);
             tongTien = tongTien.add(thanhTien);
-            
-            chiTietSanPham.setSoLuongTon(chiTietSanPham.getSoLuongTon() - itemDTO.getSoLuong());
-            chiTietSanPhamRepository.save(chiTietSanPham);
         }
         
         if (requestDTO.getMaVoucher() != null && !requestDTO.getMaVoucher().trim().isEmpty()) {
@@ -212,7 +264,6 @@ public class UserService {
                         if (voucher.getGiaTriToiThieu() == null || 
                             tongTien.compareTo(voucher.getGiaTriToiThieu()) >= 0) {
                             savedOrder.setGiamGia(giamGia);
-                            // Update voucher usage count
                             voucher.setSoLuongDaDung(voucher.getSoLuongDaDung() + 1);
                             voucherRepository.save(voucher);
                         }
@@ -348,6 +399,8 @@ public class UserService {
                 .soDienThoaiNhan(order.getSoDienThoaiNhan())
                 .nguoiNhan(order.getNguoiNhan())
                 .ghiChu(order.getGhiChu())
+                .lyDoYeuCauHuy(order.getLyDoYeuCauHuy())
+                .ngayYeuCauHuy(order.getNgayYeuCauHuy())
                 .ngayDatHang(order.getNgayDatHang())
                 .ngayCapNhat(order.getNgayCapNhat())
                 .chiTietDonHangs(order.getChiTietDonHangs() != null 

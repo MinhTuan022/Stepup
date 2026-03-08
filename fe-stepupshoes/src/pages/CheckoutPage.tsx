@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import "../styles/CheckoutPage.css";
 import { useCart } from "../context/CartContext";
 import { useAuth } from "../context/AuthContext";
@@ -22,7 +22,18 @@ const CheckoutPage: React.FC = () => {
   const [voucherInfo, setVoucherInfo] = useState<any>(null);
   const [checkingVoucher, setCheckingVoucher] = useState(false);
 
-  const total = cart.reduce((sum, item) => sum + (item.chiTietSanPham?.giaBan || 0) * item.soLuong, 0);
+  const location = useLocation();
+
+  const selectedFromState: Array<{ maChiTiet: number; soLuong: number }> | undefined = (location.state as any)?.selectedItems;
+
+  const itemsToCheckout = selectedFromState && selectedFromState.length > 0
+    ? cart.filter(c => selectedFromState.some(s => s.maChiTiet === c.maChiTiet)).map(c => {
+        const s = selectedFromState.find(s => s.maChiTiet === c.maChiTiet)!;
+        return { ...c, soLuong: s.soLuong };
+      })
+    : cart;
+
+  const total = itemsToCheckout.reduce((sum, item) => sum + (item.chiTietSanPham?.giaBan || 0) * item.soLuong, 0);
   const discount = voucherInfo?.valid ? voucherInfo.soTienGiam : 0;
   const finalTotal = total - discount;
 
@@ -67,7 +78,7 @@ const CheckoutPage: React.FC = () => {
       return;
     }
 
-    if (cart.length === 0) {
+    if (itemsToCheckout.length === 0) {
       showToast("Giỏ hàng trống", "error");
       return;
     }
@@ -85,10 +96,10 @@ const CheckoutPage: React.FC = () => {
         diaChiGiaoHang: address.trim(),
         ghiChu: note.trim() || undefined,
         maVoucher: voucher.trim() || undefined,
-        items: cart.map(item => ({
-          maChiTiet: item.maChiTiet,
-          soLuong: item.soLuong,
-        })),
+        items: itemsToCheckout.map(item => ({
+            maChiTiet: item.maChiTiet,
+            soLuong: item.soLuong,
+          })),
       };
 
       await userService.createOrder(user.maNguoiDung, orderData);
@@ -103,7 +114,7 @@ const CheckoutPage: React.FC = () => {
       showToast("Đặt hàng thành công!", "success");
       
       setTimeout(() => {
-        navigate(`/user/profile`);
+        navigate(`/profile`, { state: { tab: 'orders' } });
       }, 1500);
       
     } catch (error) {
@@ -121,7 +132,7 @@ const CheckoutPage: React.FC = () => {
         <div className="checkout-cart-section">
           <h3 className="checkout-subtitle">Giỏ hàng của bạn</h3>
           <ul className="checkout-cart-list">
-            {cart.map((item) => (
+            {itemsToCheckout.map((item) => (
               <li key={item.maChiTiet} className="checkout-cart-item">
                 <div className="checkout-cart-img">
                   {item.chiTietSanPham?.hinhAnhChinh ? (

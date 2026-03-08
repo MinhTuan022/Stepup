@@ -31,35 +31,42 @@ public class SanPhamService {
     public SanPhamDTO getSanPhamById(Integer maSanPham) {
         SanPham sanPham = sanPhamRepository.findById(maSanPham)
                 .orElseThrow(() -> new ResourceNotFoundException("Sản phẩm không tìm thấy với ID: " + maSanPham));
+        if (Boolean.TRUE.equals(sanPham.getDaXoa())) {
+            throw new ResourceNotFoundException("Sản phẩm không tìm thấy với ID: " + maSanPham);
+        }
         return mapToDTO(sanPham);
     }
 
     public List<SanPhamDTO> getAllSanPham() {
         return sanPhamRepository.findAll()
-                .stream()
-                .map(this::mapToDTO)
-                .collect(Collectors.toList());
+            .stream()
+            .filter(sp -> !Boolean.TRUE.equals(sp.getDaXoa()))
+            .map(this::mapToDTO)
+            .collect(Collectors.toList());
     }
 
     public List<SanPhamDTO> getSanPhamByDanhMuc(Integer maDanhMuc) {
         return sanPhamRepository.findByDanhMuc_MaDanhMuc(maDanhMuc)
-                .stream()
-                .map(this::mapToDTO)
-                .collect(Collectors.toList());
+            .stream()
+            .filter(sp -> !Boolean.TRUE.equals(sp.getDaXoa()))
+            .map(this::mapToDTO)
+            .collect(Collectors.toList());
     }
 
     public List<SanPhamDTO> getSanPhamActive() {
         return sanPhamRepository.findByTrangThaiTrue()
-                .stream()
-                .map(this::mapToDTO)
-                .collect(Collectors.toList());
+            .stream()
+            .filter(sp -> !Boolean.TRUE.equals(sp.getDaXoa()))
+            .map(this::mapToDTO)
+            .collect(Collectors.toList());
     }
 
     public List<SanPhamDTO> searchSanPhamByName(String tenSanPham) {
         return sanPhamRepository.findByTenSanPhamContainingIgnoreCase(tenSanPham)
-                .stream()
-                .map(this::mapToDTO)
-                .collect(Collectors.toList());
+            .stream()
+            .filter(sp -> !Boolean.TRUE.equals(sp.getDaXoa()))
+            .map(this::mapToDTO)
+            .collect(Collectors.toList());
     }
 
     public SanPhamDTO createSanPham(SanPhamDTO sanPhamDTO) {
@@ -127,7 +134,6 @@ public class SanPhamService {
         SanPham updated = sanPhamRepository.save(sanPham);
 
         if (sanPhamDTO.getChiTietSanPhams() != null) {
-            List<ChiTietSanPham> existingDetails = chiTietSanPhamRepository.findBySanPham_MaSanPham(maSanPham);
             
             for (ChiTietSanPhamDTO chiTietDTO : sanPhamDTO.getChiTietSanPhams()) {
                 if (chiTietDTO.getMaChiTiet() != null) {
@@ -196,13 +202,18 @@ public class SanPhamService {
 
     public void deleteSanPham(Integer maSanPham) {
         SanPham sanPham = sanPhamRepository.findById(maSanPham)
-                .orElseThrow(() -> new ResourceNotFoundException("Sản phẩm không tìm thấy với ID: " + maSanPham));
-        sanPhamRepository.delete(sanPham);
+            .orElseThrow(() -> new ResourceNotFoundException("Sản phẩm không tìm thấy với ID: " + maSanPham));
+        sanPham.setDaXoa(true);
+        sanPham.setNgayXoa(LocalDateTime.now());
+        sanPhamRepository.save(sanPham);
     }
 
     private SanPhamDTO mapToDTO(SanPham sanPham) {
         List<ChiTietSanPhamDTO> chiTietDTOs = chiTietSanPhamRepository.findBySanPham_MaSanPham(sanPham.getMaSanPham())
-            .stream().map(this::mapChiTietToDTO).collect(java.util.stream.Collectors.toList());
+            .stream()
+            .filter(ct -> !Boolean.TRUE.equals(ct.getDaXoa()))
+            .map(this::mapChiTietToDTO)
+            .collect(java.util.stream.Collectors.toList());
         return SanPhamDTO.builder()
                 .maSanPham(sanPham.getMaSanPham())
                 .tenSanPham(sanPham.getTenSanPham())

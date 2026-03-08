@@ -72,7 +72,7 @@ const ReviewsTab = () => {
   }
 
   const handleDelete = async (id: number) => {
-    if (!confirm('Bạn có chắc muốn xóa đánh giá này?')) return
+    if (!confirm('Bạn có chắc muốn xóa đánh giá này? ')) return
     try {
       await adminService.deleteReview(id)
       showToast('Xóa đánh giá thành công', 'success')

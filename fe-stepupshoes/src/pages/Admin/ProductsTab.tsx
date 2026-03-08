@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useToast } from "../../context/ToastContext";
 import { adminService } from "../../services/api";
 import "./ProductsTab.css";
+// import "../../../../stepupshoes/"
 
 interface ProductDetail {
   maChiTiet?: number;
@@ -54,6 +55,7 @@ const defaultForm: Partial<Product> = {
   trangThai: true,
   chiTietSanPhams: [{ ...defaultVariant }],
 };
+// ...existing code...
 
 const ProductsTab = () => {
   const { showToast } = useToast();
@@ -73,20 +75,71 @@ const ProductsTab = () => {
   const [filterCategory, setFilterCategory] = useState<number | "">("");
   const [filterStatus, setFilterStatus] = useState<boolean | "">("");
   const [imageInputs, setImageInputs] = useState<string[]>([]);
+  const [imageFiles, setImageFiles] = useState<(File | null)[]>([]);
+  const [removedVariantIds, setRemovedVariantIds] = useState<number[]>([]);
 
   useEffect(() => {
     if (showModal && form.chiTietSanPhams && form.chiTietSanPhams[variantIndex]?.hinhAnhs) {
       setImageInputs(form.chiTietSanPhams[variantIndex].hinhAnhs!.map((h) => h.duongDan));
+      setImageFiles(form.chiTietSanPhams[variantIndex].hinhAnhs!.map(() => null));
     } else if (showModal) {
       setImageInputs([]);
+      setImageFiles([]);
     }
   }, [showModal, form.chiTietSanPhams, variantIndex]);
 
-  const handleAddImageInput = () => setImageInputs((prev) => [...prev, ""]);
-  const handleRemoveImageInput = (idx: number) =>
+  const handleAddImageInput = () => {
+    setImageInputs((prev) => [...prev, ""]);
+    setImageFiles((prev) => [...prev, null]);
+  };
+  const handleRemoveImageInput = (idx: number) => {
     setImageInputs((prev) => prev.filter((_, i) => i !== idx));
+    setImageFiles((prev) => prev.filter((_, i) => i !== idx));
+  };
   const handleImageInputChange = (idx: number, value: string) =>
     setImageInputs((prev) => prev.map((v, i) => (i === idx ? value : v)));
+
+  const handleFileChange = (idx: number, file: File | null) => {
+    // If file is null, just clear selection
+    if (!file) {
+      setImageFiles((prev) => {
+        const arr = [...prev];
+        arr[idx] = null;
+        return arr;
+      });
+      return;
+    }
+
+    // Immediately upload selected file and set URL into imageInputs
+    setImageFiles((prev) => {
+      const arr = [...prev];
+      arr[idx] = file;
+      return arr;
+    });
+
+    const fd = new FormData();
+    fd.append("file", file);
+    (async () => {
+      setLoading(true);
+      try {
+        const url = await adminService.uploadImage(fd);
+        setImageInputs((prev) => {
+          const arr = [...prev];
+          arr[idx] = url;
+          return arr;
+        });
+        setImageFiles((prev) => {
+          const arr = [...prev];
+          arr[idx] = null;
+          return arr;
+        });
+        showToast("Upload ảnh thành công", "success");
+      } catch (err) {
+        showToast("Upload ảnh thất bại", "error");
+      }
+      setLoading(false);
+    })();
+  };
 
   const fetchProducts = async () => {
     setLoading(true);
@@ -181,6 +234,29 @@ const ProductsTab = () => {
     
     if (!validateForm()) return;
 
+    // Nếu có file chưa được upload, upload trước
+    for (let i = 0; i < imageFiles.length; i++) {
+      if (imageFiles[i]) {
+        try {
+          setLoading(true);
+          const fd = new FormData();
+          fd.append('file', imageFiles[i] as File);
+          const url = await adminService.uploadImage(fd);
+          setImageInputs((prev) => {
+            const arr = [...prev];
+            arr[i] = url;
+            return arr;
+          });
+          handleFileChange(i, null);
+        } catch (err) {
+          showToast('Upload ảnh thất bại', 'error');
+          setLoading(false);
+          return;
+        }
+        setLoading(false);
+      }
+    }
+
     const variants = form.chiTietSanPhams!.map((v, idx) =>
       idx === variantIndex
         ? {
@@ -196,12 +272,28 @@ const ProductsTab = () => {
     setLoading(true);
     try {
       if (editId) {
+        // First delete any removed variant IDs on the server
+        if (removedVariantIds && removedVariantIds.length > 0) {
+          await Promise.all(
+            removedVariantIds.map(async (id) => {
+              try {
+                await adminService.deleteChiTietSanPham(id);
+              } catch (err) {
+                // Ignore errors when the variant is already deleted on server
+                console.warn(`Ignore delete variant ${id} error:`, err);
+              }
+            }),
+          );
+        }
+
         await adminService.updateProduct(editId, submitForm);
         showToast("Cập nhật sản phẩm thành công!", "success");
       } else {
         await adminService.createProduct(submitForm);
         showToast("Thêm sản phẩm thành công!", "success");
       }
+      // clear removed IDs after successful save
+      setRemovedVariantIds([]);
       closeModal();
       fetchProducts();
     } catch {
@@ -235,7 +327,7 @@ const ProductsTab = () => {
   };
 
   const handleDelete = async (id: number) => {
-    if (!window.confirm("Bạn có chắc muốn xóa sản phẩm này? Hành động này không thể hoàn tác."))
+    if (!window.confirm("Bạn có chắc muốn xóa sản phẩm này? "))
       return;
     setLoading(true);
     try {
@@ -244,6 +336,21 @@ const ProductsTab = () => {
       fetchProducts();
     } catch {
       showToast("Không thể xóa sản phẩm. Vui lòng thử lại!", "error");
+    }
+    setLoading(false);
+  };
+
+  const handleToggleStatus = async (product: Product) => {
+    if (!product) return;
+    const newStatus = !product.trangThai;
+    setLoading(true);
+    try {
+      await adminService.updateProduct(product.maSanPham, { ...product, trangThai: newStatus });
+      showToast('Cập nhật trạng thái sản phẩm thành công', 'success');
+      fetchProducts();
+    } catch (err) {
+      console.error('Lỗi khi cập nhật trạng thái sản phẩm:', err);
+      showToast('Không thể cập nhật trạng thái sản phẩm', 'error');
     }
     setLoading(false);
   };
@@ -447,7 +554,7 @@ const ProductsTab = () => {
                   <div style={{ marginBottom: 12 }}>
                     <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                       <span>Biến thể:</span>
-                      {form.chiTietSanPhams?.map((v, idx) => (
+                      {form.chiTietSanPhams?.map((_, idx) => (
                         <button
                           key={idx}
                           type="button"
@@ -486,12 +593,13 @@ const ProductsTab = () => {
                           color: "#28a745",
                         }}
                         onClick={() => {
-                          setForm((prev) => ({
-                            ...prev,
-                            chiTietSanPhams: [...(prev.chiTietSanPhams || []), { ...defaultVariant }],
-                          }));
-                          setVariantIndex(form.chiTietSanPhams ? form.chiTietSanPhams.length : 0);
-                          setImageInputs([]);
+                          setForm((prev) => {
+                            const newVariants = [...(prev.chiTietSanPhams || []), { ...defaultVariant }];
+                            const newIndex = newVariants.length - 1;
+                            setVariantIndex(newIndex);
+                            setImageInputs([]);
+                            return { ...prev, chiTietSanPhams: newVariants };
+                          });
                         }}
                       >
                         + Thêm biến thể
@@ -511,15 +619,18 @@ const ProductsTab = () => {
                             if (window.confirm("Xóa biến thể này?")) {
                               setForm((prev) => {
                                 const variants = prev.chiTietSanPhams ? [...prev.chiTietSanPhams] : [];
-                                variants.splice(variantIndex, 1);
+                                const [removed] = variants.splice(variantIndex, 1);
+                                if (removed && removed.maChiTiet) {
+                                  setRemovedVariantIds((ids) => [...ids, removed.maChiTiet!]);
+                                }
+                                const newIndex = variants.length > 0 ? Math.min(variantIndex, variants.length - 1) : 0;
+                                const newImageInputs = variants[newIndex]?.hinhAnhs
+                                  ? variants[newIndex].hinhAnhs.map((h) => h.duongDan)
+                                  : [];
+                                setVariantIndex(newIndex);
+                                setImageInputs(newImageInputs);
                                 return { ...prev, chiTietSanPhams: variants };
                               });
-                              setVariantIndex(0);
-                              setImageInputs(
-                                form.chiTietSanPhams?.[0]?.hinhAnhs
-                                  ? form.chiTietSanPhams[0].hinhAnhs.map((h) => h.duongDan)
-                                  : [],
-                              );
                             }
                           }}
                         >
@@ -603,23 +714,78 @@ const ProductsTab = () => {
 
                     <div className="form-group">
                       <label>URL hình ảnh chính</label>
-                      <input
-                        name="hinhAnhChinh"
-                        value={form.chiTietSanPhams?.[variantIndex]?.hinhAnhChinh || ""}
-                        onChange={handleDetailChange}
-                        placeholder="https://example.com/image.jpg"
-                      />
+                      <div className="main-image-field">
+                        {/* <input
+                          name="hinhAnhChinh"
+                          value={form.chiTietSanPhams?.[variantIndex]?.hinhAnhChinh || ""}
+                          onChange={handleDetailChange}
+                          placeholder="https://example.com/image.jpg"
+                          style={{ flex: 1 }}
+                        /> */}
+                        <input
+                          className="main-image-url"
+                          type="text"
+                          readOnly
+                          title={
+                            form.chiTietSanPhams?.[variantIndex]?.hinhAnhChinh
+                              ? `http://localhost:8080${form.chiTietSanPhams[variantIndex]!.hinhAnhChinh}`
+                              : ""
+                          }
+                          value={
+                            form.chiTietSanPhams?.[variantIndex]?.hinhAnhChinh
+                              ? `${form.chiTietSanPhams[variantIndex]!.hinhAnhChinh}`
+                              : ""
+                          }
+                          placeholder="Chưa có ảnh chính"
+                        />
+                        <input
+                          className="main-image-file-input"
+                          type="file"
+                          accept="image/*"
+                          onChange={async (e) => {
+                            const f = e.target.files?.[0];
+                            if (!f) return;
+                            setLoading(true);
+                            try {
+                              const fd = new FormData();
+                              fd.append('file', f);
+                              const url = await adminService.uploadImage(fd);
+                              setForm((prev) => {
+                                const variants = prev.chiTietSanPhams ? [...prev.chiTietSanPhams] : [{ ...defaultVariant }];
+                                variants[variantIndex] = {
+                                  ...variants[variantIndex],
+                                  hinhAnhChinh: url,
+                                };
+                                return { ...prev, chiTietSanPhams: variants };
+                              });
+                              showToast('Upload ảnh chính thành công', 'success');
+                            } catch (err) {
+                              showToast('Upload ảnh thất bại', 'error');
+                            }
+                            setLoading(false);
+                          }}
+                        />
+                      </div>
                     </div>
 
                     <div className="form-group">
                       <label>Ảnh phụ (URL, có thể nhiều)</label>
                       {imageInputs.map((url, idx) => (
-                        <div key={idx} style={{ display: "flex", gap: 8, marginBottom: 4 }}>
+                        <div key={idx} style={{ display: "flex", gap: 8, marginBottom: 8, alignItems: 'center' }}>
                           <input
+                            className="main-image-url"
                             type="text"
                             value={url}
                             onChange={(e) => handleImageInputChange(idx, e.target.value)}
                             placeholder={`URL ảnh phụ #${idx + 1}`}
+                            style={{ flex: 1 }}
+                          />
+                          <input
+                          className="main-image-file-input"
+
+                            type="file"
+                            accept="image/*"
+                            onChange={(e) => handleFileChange(idx, e.target.files?.[0] ?? null)}
                           />
                           <button
                             type="button"
@@ -676,7 +842,7 @@ const ProductsTab = () => {
                             {form.chiTietSanPhams[variantIndex]?.hinhAnhChinh && (
                               <div className="preview-image">
                                 <img
-                                  src={form.chiTietSanPhams[variantIndex]?.hinhAnhChinh}
+                                  src={`http://localhost:8080${form.chiTietSanPhams[variantIndex]?.hinhAnhChinh}`}
                                   alt="Preview"
                                   onError={(e) => {
                                     (e.target as HTMLImageElement).style.display = "none";
@@ -692,7 +858,7 @@ const ProductsTab = () => {
                                     url ? (
                                       <img
                                         key={idx}
-                                        src={url}
+                                        src={`http://localhost:8080${url}`}
                                         alt={`Ảnh phụ #${idx + 1}`}
                                         className="preview-sub-image"
                                         onError={(e) => {
@@ -764,7 +930,7 @@ const ProductsTab = () => {
                   <td>
                     {p.chiTietSanPhams?.[0]?.hinhAnhChinh ? (
                       <img
-                        src={p.chiTietSanPhams[0].hinhAnhChinh}
+                        src={`http://localhost:8080${p.chiTietSanPhams[0].hinhAnhChinh}`}
                         alt={p.tenSanPham}
                         style={{
                           width: 48,
@@ -790,17 +956,41 @@ const ProductsTab = () => {
                   <td>{getCategoryName(p.maDanhMuc)}</td>
                   <td>
                     {p.chiTietSanPhams && p.chiTietSanPhams.length > 0 ? (
-                      <ul style={{ paddingLeft: 16, margin: 0 }}>
-                        {p.chiTietSanPhams.map((v, idx) => (
-                          <li key={idx} style={{ marginBottom: 4 }}>
-                            <span className="sku-badge">{v.maSKU}</span> |{" "}
-                            <span>{v.mauSac}</span> |{" "}
-                            <span>{v.size}</span> |{" "}
-                            <span>{v.giaBan?.toLocaleString()} đ</span> |{" "}
-                            <span>{v.soLuongTon} tồn</span>
-                          </li>
-                        ))}
-                      </ul>
+                      <div className="variant-list">
+                        {p.chiTietSanPhams.map((v, idx) => {
+                          const thumb = v.hinhAnhChinh ? `http://localhost:8080${v.hinhAnhChinh}` : ''
+                          return (
+                            <div className="variant-chip" key={idx}>
+                              <div className="variant-thumb">
+                                {thumb ? (
+                                  <img
+                                    src={thumb}
+                                    alt={v.maSKU}
+                                    onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+                                  />
+                                ) : (
+                                  <div className="no-thumb">—</div>
+                                )}
+                              </div>
+                              <div className="variant-info">
+                                <div className="variant-top">
+                                  <span className="sku-badge">{v.maSKU}</span>
+                                  <span className="variant-price">{(v.giaBan || 0).toLocaleString('vi-VN')} ₫</span>
+                                </div>
+                                <div className="variant-bottom">
+                                  <span
+                                    className="variant-swatch"
+                                    title={v.mauSac}
+                                    style={{ backgroundColor: v.mauSac || 'transparent' }}
+                                  />
+                                  <span className="variant-size">{v.size}</span>
+                                  <span className={`variant-stock ${v.soLuongTon > 0 ? 'in' : 'out'}`}>{v.soLuongTon} tồn</span>
+                                </div>
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
                     ) : (
                       <span>-</span>
                     )}
@@ -810,16 +1000,16 @@ const ProductsTab = () => {
                       {p.trangThai ? "Kinh doanh" : "Ngừng"}
                     </span>
                   </td>
-                  <td className="actions">
+                  <td className="action-view">
                     <button className="btn-edit" onClick={() => handleEdit(p)} title="Chỉnh sửa">
                       Sửa
                     </button>
                     <button
-                      className="btn-delete"
-                      onClick={() => handleDelete(p.maSanPham)}
-                      title="Xóa"
+                      className={`btn-toggle ${p.trangThai ? 'active' : 'inactive'}`}
+                      onClick={() => handleToggleStatus(p)}
+                      title={p.trangThai ? 'Ngừng kinh doanh' : 'Bán lại'}
                     >
-                      Xóa
+                      {p.trangThai ? 'Ngừng' : 'Kinh doanh'}
                     </button>
                   </td>
                 </tr>

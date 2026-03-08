@@ -1,7 +1,8 @@
-import { useState, forwardRef, useImperativeHandle } from "react";
+import { useState, forwardRef, useImperativeHandle, useEffect } from "react";
 import { useCart } from "../context/CartContext";
 import { useNavigate } from "react-router-dom";
 import "./Cart.css";
+import { BASE_IMAGE_URL } from "../constants";
 
 export interface CartRef {
   open: () => void;
@@ -12,6 +13,7 @@ const Cart = forwardRef<CartRef>((_props, ref) => {
   const { cart, loading, error, updateCartItem, removeCartItem, clearCart } = useCart();
   const [open, setOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [selectedMap, setSelectedMap] = useState<Record<number, boolean>>({});
   const navigate = useNavigate();
 
   useImperativeHandle(ref, () => ({
@@ -30,6 +32,29 @@ const Cart = forwardRef<CartRef>((_props, ref) => {
     setToast("Đã xóa sản phẩm khỏi giỏ hàng");
   };
 
+  const toggleSelect = (maChiTiet: number) => {
+    setSelectedMap(prev => ({ ...prev, [maChiTiet]: !prev[maChiTiet] }));
+  };
+
+  const selectAll = (checked: boolean) => {
+    const map: Record<number, boolean> = {};
+    cart.forEach(i => { map[i.maChiTiet] = checked; });
+    setSelectedMap(map);
+  };
+
+  useEffect(() => {
+    if (!cart || cart.length === 0) {
+      setSelectedMap({});
+      return;
+    }
+
+    const next: Record<number, boolean> = {};
+    cart.forEach(i => {
+      next[i.maChiTiet] = selectedMap.hasOwnProperty(i.maChiTiet) ? !!selectedMap[i.maChiTiet] : true;
+    });
+    setSelectedMap(next);
+  }, [cart]);
+
   const handleClear = async () => {
     if (window.confirm("Bạn có chắc muốn xóa toàn bộ giỏ hàng?")) {
       await clearCart();
@@ -39,7 +64,11 @@ const Cart = forwardRef<CartRef>((_props, ref) => {
 
   const handleCheckout = () => {
     setOpen(false);
-    navigate("/checkout");
+    const selectedItems = cart
+      .filter(i => selectedMap[i.maChiTiet] || Object.keys(selectedMap).length === 0)
+      .map(i => ({ maChiTiet: i.maChiTiet, soLuong: i.soLuong }));
+
+    navigate('/checkout', { state: { selectedItems } });
   };
 
   const incrementQuantity = (maChiTiet: number, currentQty: number, maxQty: number) => {
@@ -54,8 +83,9 @@ const Cart = forwardRef<CartRef>((_props, ref) => {
     }
   };
 
-  const total = cart.reduce((sum, item) => sum + (item.chiTietSanPham?.giaBan || 0) * item.soLuong, 0);
-  const itemCount = cart.reduce((sum, item) => sum + item.soLuong, 0);
+  const selectedItems = cart.filter(i => !!selectedMap[i.maChiTiet]);
+  const total = selectedItems.reduce((sum, item) => sum + (item.chiTietSanPham?.giaBan || 0) * item.soLuong, 0);
+  const itemCount = selectedItems.reduce((sum, item) => sum + item.soLuong, 0);
 
   return (
     <>
@@ -114,11 +144,28 @@ const Cart = forwardRef<CartRef>((_props, ref) => {
             </div>
           ) : (
             <div className="modern-cart-list">
+              <div className="cart-select-all">
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={cart.length > 0 && cart.every(i => selectedMap[i.maChiTiet])}
+                    onChange={(e) => selectAll(e.target.checked)}
+                  />
+                  Chọn tất cả
+                </label>
+              </div>
               {cart.map((item) => (
-                <div key={item.maChiTiet} className="modern-cart-item">
+                  <div key={item.maChiTiet} className="modern-cart-item">
+                    <div className="cart-item-select">
+                      <input
+                        type="checkbox"
+                        checked={!!selectedMap[item.maChiTiet] || false}
+                        onChange={() => toggleSelect(item.maChiTiet)}
+                      />
+                    </div>
                   <div className="cart-item-image">
                     {item.chiTietSanPham?.hinhAnhChinh ? (
-                      <img src={item.chiTietSanPham.hinhAnhChinh} alt={item.chiTietSanPham?.tenSanPham} />
+                      <img src={`${BASE_IMAGE_URL}${item.chiTietSanPham.hinhAnhChinh}`} alt={item.chiTietSanPham?.tenSanPham} />
                     ) : (
                       <div className="cart-image-placeholder">
                         <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
@@ -189,17 +236,17 @@ const Cart = forwardRef<CartRef>((_props, ref) => {
         {cart.length > 0 && (
           <div className="modern-cart-footer">
             <div className="cart-summary">
-              <div className="summary-row">
+              {/* <div className="summary-row">
                 <span>Tạm tính</span>
                 <span>{total.toLocaleString("vi-VN")}₫</span>
               </div>
               <div className="summary-row shipping">
                 <span>Phí vận chuyển</span>
                 <span className="free-badge">Miễn phí</span>
-              </div>
+              </div> */}
               <div className="summary-divider" />
               <div className="summary-row total-row">
-                <span>Tổng cộng</span>
+                <span>Tạm tính</span>
                 <span className="total-value">{total.toLocaleString("vi-VN")}₫</span>
               </div>
             </div>
@@ -208,7 +255,7 @@ const Cart = forwardRef<CartRef>((_props, ref) => {
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
               </svg>
-              Thanh toán ngay
+              Thanh toán mục đã chọn
             </button>
 
             <button className="btn-clear-cart" onClick={handleClear}>

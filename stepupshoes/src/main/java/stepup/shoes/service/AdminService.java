@@ -10,6 +10,8 @@ import stepup.shoes.repository.*;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -31,12 +33,15 @@ public class AdminService {
     // ==================== USER MANAGEMENT ====================
 
     public Map<String, Object> getAllUsers(int page, int size) {
-        int totalUsers = (int) nguoiDungRepository.count();
-        List<NguoiDungDTO> users = nguoiDungRepository.findAll().stream()
-                .map(this::convertToNguoiDungDTO)
-                .skip((long) page * size)
-                .limit(size)
-                .collect(Collectors.toList());
+        List<NguoiDung> all = nguoiDungRepository.findAll().stream()
+            .filter(u -> !Boolean.TRUE.equals(u.getDaXoa()))
+            .collect(Collectors.toList());
+        int totalUsers = all.size();
+        List<NguoiDungDTO> users = all.stream()
+            .map(this::convertToNguoiDungDTO)
+            .skip((long) page * size)
+            .limit(size)
+            .collect(Collectors.toList());
         
         Map<String, Object> result = new HashMap<>();
         result.put("users", users);
@@ -50,6 +55,9 @@ public class AdminService {
     public NguoiDungDTO getUserById(Integer id) {
         NguoiDung user = nguoiDungRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Người dùng không tồn tại"));
+        if (Boolean.TRUE.equals(user.getDaXoa())) {
+            throw new ResourceNotFoundException("Người dùng không tồn tại");
+        }
         return convertToNguoiDungDTO(user);
     }
 
@@ -84,8 +92,10 @@ public class AdminService {
 
     public void deleteUser(Integer id) {
         NguoiDung user = nguoiDungRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Người dùng không tồn tại"));
-        nguoiDungRepository.delete(user);
+            .orElseThrow(() -> new ResourceNotFoundException("Người dùng không tồn tại"));
+        user.setDaXoa(true);
+        user.setNgayXoa(LocalDateTime.now());
+        nguoiDungRepository.save(user);
     }
 
     // ==================== ORDER MANAGEMENT ====================
@@ -129,17 +139,92 @@ public class AdminService {
     public DonHangDTO updateOrderStatus(Integer id, String status) {
         DonHang order = donHangRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Đơn hàng không tồn tại"));
-        order.setTrangThaiDonHang(status);
+        String currentStatus = order.getTrangThaiDonHang();
+
+        if (status == null || status.isEmpty()) {
+            throw new IllegalArgumentException("Trạng thái mới không hợp lệ");
+        }
+
+        if (status.equals(currentStatus)) {
+            return convertToDonHangDTO(order);
+        }
+
+        if (TrangThaiDonHang.HUY.getCode().equals(status)) {
+            if (!TrangThaiDonHang.canCancel(currentStatus)) {
+                throw new IllegalArgumentException("Không thể hủy đơn hàng ở trạng thái hiện tại");
+            }
+            order.setTrangThaiDonHang(status);
+            try {
+                if (!"tai_quay".equals(order.getLoaiDonHang())) {
+                    restoreInventoryAfterCancel(order.getMaDonHang());
+                }
+            } catch (Exception ex) {
+                System.err.println("Failed to restore inventory after cancel: " + ex.getMessage());
+            }
+        } else {
+            if (!TrangThaiDonHang.isForwardTransition(currentStatus, status)) {
+                if (!(TrangThaiDonHang.YEU_CAU_HUY.getCode().equals(currentStatus)
+                        && TrangThaiDonHang.CHUAN_BI_HANG.getCode().equals(status))) {
+                    throw new IllegalArgumentException("Không được lùi hoặc nhảy tới trạng thái không hợp lệ");
+                }
+            }
+            order.setTrangThaiDonHang(status);
+            if (TrangThaiDonHang.YEU_CAU_HUY.getCode().equals(currentStatus)
+                    && TrangThaiDonHang.CHUAN_BI_HANG.getCode().equals(status)) {
+                order.setLyDoYeuCauHuy(null);
+                order.setNgayYeuCauHuy(null);
+            }
+        }
+
+        LichSuTrangThaiDonHang lichSu = new LichSuTrangThaiDonHang();
+        lichSu.setDonHang(order);
+        lichSu.setTrangThaiCu(currentStatus);
+        lichSu.setTrangThaiMoi(status);
+        lichSu.setGhiChu("Cập nhật trạng thái");
+        lichSu.setNguoiCapNhat(order.getNguoiDung());
+        lichSuTrangThaiDonHangRepository.save(lichSu);
+
         order.setNgayCapNhat(LocalDateTime.now());
         DonHang updatedOrder = donHangRepository.save(order);
+
+        try {
+            if (TrangThaiDonHang.CHUAN_BI_HANG.getCode().equals(status) && !"tai_quay".equals(order.getLoaiDonHang())) {
+                updateInventoryAfterOrder(updatedOrder.getMaDonHang());
+            }
+        } catch (Exception ex) {
+            System.err.println("Failed to deduct inventory after confirming order: " + ex.getMessage());
+        }
+
         return convertToDonHangDTO(updatedOrder);
+    }
+
+    /**
+     * Khi đơn hàng bị hủy, khôi phục lại tồn kho (chỉ cho đơn online vì đơn quầy trừ khi finalize)
+     */
+    private void restoreInventoryAfterCancel(Integer donHangId) {
+        DonHang donHang = donHangRepository.findById(donHangId)
+                .orElseThrow(() -> new RuntimeException("Đơn hàng không tồn tại"));
+
+        if (donHang.getChiTietDonHangs() != null && !donHang.getChiTietDonHangs().isEmpty()) {
+            donHang.getChiTietDonHangs().forEach(chiTietDonHang -> {
+                ChiTietSanPham chiTietSanPham = chiTietDonHang.getChiTietSanPham();
+                int restored = chiTietDonHang.getSoLuong();
+                int newQty = (chiTietSanPham.getSoLuongTon() == null ? 0 : chiTietSanPham.getSoLuongTon()) + restored;
+                chiTietSanPham.setSoLuongTon(newQty);
+                if (newQty > 0) chiTietSanPham.setTrangThai(true);
+                chiTietSanPham.setNgayCapNhat(LocalDateTime.now());
+                chiTietSanPhamRepository.save(chiTietSanPham);
+            });
+        }
     }
 
     public DonHangDTO updateOrder(Integer id, DonHangDTO donHangDTO) {
         DonHang order = donHangRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Đơn hàng không tồn tại"));
         
-        if (donHangDTO.getTrangThaiDonHang() != null) order.setTrangThaiDonHang(donHangDTO.getTrangThaiDonHang());
+        if (donHangDTO.getTrangThaiDonHang() != null) {
+            return updateOrderStatus(id, donHangDTO.getTrangThaiDonHang());
+        }
         if (donHangDTO.getTrangThaiThanhToan() != null) order.setTrangThaiThanhToan(donHangDTO.getTrangThaiThanhToan());
         if (donHangDTO.getDiaChiGiaoHang() != null) order.setDiaChiGiaoHang(donHangDTO.getDiaChiGiaoHang());
         if (donHangDTO.getSoDienThoaiNhan() != null) order.setSoDienThoaiNhan(donHangDTO.getSoDienThoaiNhan());
@@ -179,7 +264,8 @@ public class AdminService {
             donHang.setNguoiDung(user);
         }
         donHang.setLoaiDonHang("tai_quay");  // Loại đơn hàng tại quầy
-        donHang.setTrangThaiDonHang("dat_hang");
+        // Khi tạo đơn (online hoặc tại quầy) khởi tạo ở trạng thái chờ xác nhận
+        donHang.setTrangThaiDonHang("cho_xac_nhan");
         donHang.setTrangThaiThanhToan("chua_thanh_toan");
         donHang.setDiaChiGiaoHang(donHangDTO.getDiaChiGiaoHang() != null ? 
                 donHangDTO.getDiaChiGiaoHang() : "Tại quầy");
@@ -342,17 +428,18 @@ public class AdminService {
             throw new IllegalArgumentException("Phương thức thanh toán không hợp lệ");
         }
         
+        String prevStatus = donHang.getTrangThaiDonHang();
         donHang.setPhuongThucThanhToan(phuongThucThanhToan);
         donHang.setTrangThaiThanhToan("da_thanh_toan");
-        donHang.setTrangThaiDonHang("hoan_thanh");
+        donHang.setTrangThaiDonHang(TrangThaiDonHang.HOAN_THANH.getCode());
         donHang.setNgayCapNhat(LocalDateTime.now());
         
         DonHang updatedOrder = donHangRepository.save(donHang);
         
         LichSuTrangThaiDonHang lichSu = new LichSuTrangThaiDonHang();
         lichSu.setDonHang(updatedOrder);
-        lichSu.setTrangThaiCu("dat_hang");
-        lichSu.setTrangThaiMoi("hoan_thanh");
+        lichSu.setTrangThaiCu(prevStatus);
+        lichSu.setTrangThaiMoi(TrangThaiDonHang.HOAN_THANH.getCode());
         lichSu.setGhiChu("Hoàn thành đơn hàng tại quầy - " + phuongThucThanhToan);
         lichSu.setNguoiCapNhat(updatedOrder.getNguoiDung()); 
         lichSuTrangThaiDonHangRepository.save(lichSu);
@@ -413,14 +500,16 @@ public class AdminService {
     }
 
     public Map<String, Object> getAllVouchers(int page, int size) {
-        List<Voucher> vouchers = voucherRepository.findAll();
-        int totalVouchers = vouchers.size();
+        List<Voucher> all = voucherRepository.findAll().stream()
+            .filter(v -> !Boolean.TRUE.equals(v.getDaXoa()))
+            .collect(Collectors.toList());
+        int totalVouchers = all.size();
         
-        List<VoucherDTO> voucherList = vouchers.stream()
-                .map(this::convertToVoucherDTO)
-                .skip((long) page * size)
-                .limit(size)
-                .collect(Collectors.toList());
+        List<VoucherDTO> voucherList = all.stream()
+            .map(this::convertToVoucherDTO)
+            .skip((long) page * size)
+            .limit(size)
+            .collect(Collectors.toList());
         
         Map<String, Object> result = new HashMap<>();
         result.put("vouchers", voucherList);
@@ -434,6 +523,9 @@ public class AdminService {
     public VoucherDTO getVoucherById(Integer id) {
         Voucher voucher = voucherRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Voucher không tồn tại"));
+        if (Boolean.TRUE.equals(voucher.getDaXoa())) {
+            throw new ResourceNotFoundException("Voucher không tồn tại");
+        }
         return convertToVoucherDTO(voucher);
     }
 
@@ -475,8 +567,10 @@ public class AdminService {
 
     public void deleteVoucher(Integer id) {
         Voucher voucher = voucherRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Voucher không tồn tại"));
-        voucherRepository.delete(voucher);
+            .orElseThrow(() -> new ResourceNotFoundException("Voucher không tồn tại"));
+        voucher.setDaXoa(true);
+        voucher.setNgayXoa(LocalDateTime.now());
+        voucherRepository.save(voucher);
     }
 
     // ==================== STATISTICS & REPORTING ====================
@@ -484,11 +578,11 @@ public class AdminService {
     public Map<String, Object> getStatisticsOverview() {
         Map<String, Object> overview = new HashMap<>();
         
-        long totalUsers = nguoiDungRepository.count();
+        long totalUsers = nguoiDungRepository.findAll().stream().filter(u -> !Boolean.TRUE.equals(u.getDaXoa())).count();
         
         long totalOrders = donHangRepository.count();
         
-        long totalProducts = sanPhamRepository.count();
+        long totalProducts = sanPhamRepository.findAll().stream().filter(p -> !Boolean.TRUE.equals(p.getDaXoa())).count();
         
         BigDecimal totalRevenue = donHangRepository.findAll().stream()
                 .map(DonHang::getTongTien)
@@ -503,6 +597,12 @@ public class AdminService {
         overview.put("totalUsers", totalUsers);
         overview.put("totalOrders", totalOrders);
         overview.put("totalProducts", totalProducts);
+        // Count active products (not deleted and trangThai == true)
+        long activeProducts = sanPhamRepository.findAll().stream()
+            .filter(p -> !Boolean.TRUE.equals(p.getDaXoa()))
+            .filter(SanPham::getTrangThai)
+            .count();
+        overview.put("activeProducts", activeProducts);
         overview.put("totalRevenue", totalRevenue);
         overview.put("ordersThisMonth", ordersThisMonth);
         
@@ -511,27 +611,57 @@ public class AdminService {
 
     public Map<String, Object> getRevenueStatistics(String fromDate, String toDate) {
         Map<String, Object> revenueStats = new HashMap<>();
-        
         List<DonHang> allOrders = donHangRepository.findAll();
-        
-        BigDecimal totalRevenue = allOrders.stream()
-                .map(DonHang::getTongTien)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
-        
-        Map<String, BigDecimal> revenueByStatus = allOrders.stream()
-                .collect(Collectors.groupingBy(
-                        DonHang::getTrangThaiDonHang,
-                        Collectors.reducing(
-                                BigDecimal.ZERO,
-                                DonHang::getTongTien,
-                                BigDecimal::add
-                        )
-                ));
-        
+
+        // Parse optional date range (expected format: yyyy-MM-dd)
+        LocalDateTime from = null;
+        LocalDateTime to = null;
+        DateTimeFormatter fmt = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+        try {
+            if (fromDate != null && !fromDate.isEmpty()) {
+            LocalDate ld = LocalDate.parse(fromDate, fmt);
+            from = ld.atStartOfDay();
+            }
+            if (toDate != null && !toDate.isEmpty()) {
+            LocalDate ld = LocalDate.parse(toDate, fmt);
+            to = ld.atTime(23, 59, 59);
+            }
+        } catch (Exception e) {
+            from = null;
+            to = null;
+        }
+
+        final LocalDateTime start = from;
+        final LocalDateTime end = to;
+
+        List<DonHang> filteredOrders = allOrders.stream()
+            .filter(order -> {
+                LocalDateTime ngay = order.getNgayDatHang();
+                if (ngay == null) return false;
+                boolean afterFrom = (start == null) || !ngay.isBefore(start);
+                boolean beforeTo = (end == null) || !ngay.isAfter(end);
+                return afterFrom && beforeTo;
+            })
+            .collect(Collectors.toList());
+
+        BigDecimal totalRevenue = filteredOrders.stream()
+            .map(DonHang::getTongTien)
+            .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        Map<String, BigDecimal> revenueByStatus = filteredOrders.stream()
+            .collect(Collectors.groupingBy(
+                DonHang::getTrangThaiDonHang,
+                Collectors.reducing(
+                    BigDecimal.ZERO,
+                    DonHang::getTongTien,
+                    BigDecimal::add
+                )
+            ));
+
         revenueStats.put("totalRevenue", totalRevenue);
         revenueStats.put("revenueByStatus", revenueByStatus);
-        revenueStats.put("totalOrders", allOrders.size());
-        
+        revenueStats.put("totalOrders", filteredOrders.size());
+
         return revenueStats;
     }
 
@@ -556,7 +686,7 @@ public class AdminService {
     public Map<String, Object> getProductStatistics() {
         Map<String, Object> productStats = new HashMap<>();
         
-        List<SanPham> allProducts = sanPhamRepository.findAll();
+        List<SanPham> allProducts = sanPhamRepository.findAll().stream().filter(p -> !Boolean.TRUE.equals(p.getDaXoa())).collect(Collectors.toList());
         
         productStats.put("totalProducts", allProducts.size());
         productStats.put("activeProducts", allProducts.stream().filter(SanPham::getTrangThai).count());
@@ -568,7 +698,7 @@ public class AdminService {
     public Map<String, Object> getUserStatistics() {
         Map<String, Object> userStats = new HashMap<>();
         
-        List<NguoiDung> allUsers = nguoiDungRepository.findAll();
+        List<NguoiDung> allUsers = nguoiDungRepository.findAll().stream().filter(u -> !Boolean.TRUE.equals(u.getDaXoa())).collect(Collectors.toList());
         
         userStats.put("totalUsers", allUsers.size());
         userStats.put("activeUsers", allUsers.stream().filter(NguoiDung::getTrangThai).count());
@@ -608,14 +738,16 @@ public class AdminService {
 
 
     public Map<String, Object> getAllReviews(int page, int size, Integer status) {
-        List<DanhGia> reviews = danhGiaRepository.findAll();
+        List<DanhGia> reviews = danhGiaRepository.findAll().stream()
+            .filter(r -> !Boolean.TRUE.equals(r.getDaXoa()))
+            .collect(Collectors.toList());
         int totalReviews = reviews.size();
         
         List<DanhGiaDTO> reviewList = reviews.stream()
-                .map(this::convertToDanhGiaDTO)
-                .skip((long) page * size)
-                .limit(size)
-                .collect(Collectors.toList());
+            .map(this::convertToDanhGiaDTO)
+            .skip((long) page * size)
+            .limit(size)
+            .collect(Collectors.toList());
         
         Map<String, Object> result = new HashMap<>();
         result.put("reviews", reviewList);
@@ -642,8 +774,10 @@ public class AdminService {
 
     public void deleteReview(Integer id) {
         DanhGia review = danhGiaRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Đánh giá không tồn tại"));
-        danhGiaRepository.delete(review);
+            .orElseThrow(() -> new ResourceNotFoundException("Đánh giá không tồn tại"));
+        review.setDaXoa(true);
+        review.setNgayXoa(LocalDateTime.now());
+        danhGiaRepository.save(review);
     }
 
     public Map<String, Object> getSystemConfig() {
@@ -715,6 +849,8 @@ public class AdminService {
                 .soDienThoaiNhan(order.getSoDienThoaiNhan())
                 .nguoiNhan(order.getNguoiNhan())
                 .ghiChu(order.getGhiChu())
+                .lyDoYeuCauHuy(order.getLyDoYeuCauHuy())
+                .ngayYeuCauHuy(order.getNgayYeuCauHuy())
                 .chiTietDonHangs(chiTietDTOs)
                 .build();
     }

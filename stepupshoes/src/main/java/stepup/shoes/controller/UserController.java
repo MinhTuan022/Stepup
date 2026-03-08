@@ -109,11 +109,24 @@ public class UserController {
     public ResponseEntity<ApiResponseDTO<DonHangDTO>> createOrder(
             @PathVariable Integer id,
             @RequestBody CreateOrderRequestDTO requestDTO) {
-        // Ensure the user ID in the path matches the one in the request
         requestDTO.setMaNguoiDung(id);
         DonHangDTO order = userService.createOrder(requestDTO);
         return ResponseEntity.ok(
             new ApiResponseDTO<>(true, "Tạo đơn hàng thành công", order)
+        );
+    }
+
+    @PutMapping("/{id}/orders/{orderId}/cancel")
+    @Operation(summary = "Hủy đơn hàng bởi khách hàng", description = "Khách hàng hủy đơn của chính họ khi đơn đang chờ xác nhận")
+    public ResponseEntity<ApiResponseDTO<DonHangDTO>> cancelOrder(
+            @PathVariable Integer id,
+            @PathVariable Integer orderId,
+            @RequestBody(required = false) java.util.Map<String, String> body) {
+        String lyDo = null;
+        if (body != null) lyDo = body.get("lyDo");
+        DonHangDTO updated = userService.cancelOrder(id, orderId, lyDo);
+        return ResponseEntity.ok(
+            new ApiResponseDTO<>(true, "Hủy đơn hàng thành công", updated)
         );
     }
 }

@@ -33,5 +33,6 @@ public class LichSuVoucher {
     private BigDecimal giaTriGiam;
 
     @Column(name = "NgaySuDung")
+    @Builder.Default
     private LocalDateTime ngaySuDung = LocalDateTime.now();
 }

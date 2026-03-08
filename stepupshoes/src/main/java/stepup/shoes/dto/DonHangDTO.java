@@ -24,6 +24,8 @@ public class DonHangDTO {
     private String soDienThoaiNhan;
     private String nguoiNhan;
     private String ghiChu;
+    private String lyDoYeuCauHuy;
+    private java.time.LocalDateTime ngayYeuCauHuy;
     private LocalDateTime ngayDatHang;
     private LocalDateTime ngayCapNhat;
     private List<ChiTietDonHangDTO> chiTietDonHangs;

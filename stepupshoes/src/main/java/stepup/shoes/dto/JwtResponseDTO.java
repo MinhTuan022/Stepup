@@ -8,6 +8,7 @@ import lombok.*;
 @Builder
 public class JwtResponseDTO {
     private String accessToken;
+    @Builder.Default
     private String tokenType = "Bearer";
     private Integer maNguoiDung;
     private String tenDangNhap;

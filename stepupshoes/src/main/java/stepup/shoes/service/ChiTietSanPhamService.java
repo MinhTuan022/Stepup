@@ -21,12 +21,18 @@ public class ChiTietSanPhamService {
 
     public List<ChiTietSanPhamDTO> getBySanPhamId(Integer maSanPham) {
         List<ChiTietSanPham> list = chiTietSanPhamRepository.findBySanPham_MaSanPham(maSanPham);
-        return list.stream().map(this::mapToDTO).collect(Collectors.toList());
+        return list.stream()
+            .filter(ct -> !Boolean.TRUE.equals(ct.getDaXoa()))
+            .map(this::mapToDTO)
+            .collect(Collectors.toList());
     }
 
     public ChiTietSanPhamDTO getById(Integer id) {
         ChiTietSanPham chiTiet = chiTietSanPhamRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy chi tiết sản phẩm"));
+        if (Boolean.TRUE.equals(chiTiet.getDaXoa())) {
+            throw new ResourceNotFoundException("Không tìm thấy chi tiết sản phẩm");
+        }
         return mapToDTO(chiTiet);
     }
 
@@ -88,8 +94,10 @@ public class ChiTietSanPhamService {
 
     public void delete(Integer id) {
         ChiTietSanPham chiTiet = chiTietSanPhamRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy chi tiết sản phẩm"));
-        chiTietSanPhamRepository.delete(chiTiet);
+            .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy chi tiết sản phẩm"));
+        chiTiet.setDaXoa(true);
+        chiTiet.setNgayXoa(java.time.LocalDateTime.now());
+        chiTietSanPhamRepository.save(chiTiet);
     }
 
     private ChiTietSanPhamDTO mapToDTO(ChiTietSanPham chiTiet) {

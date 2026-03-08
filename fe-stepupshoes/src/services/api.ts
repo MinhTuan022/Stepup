@@ -1,7 +1,5 @@
-// ...existing code...
 export const orderService = {
   createOrder: async (cart: any[]) => {
-    // Tùy backend, có thể cần truyền thêm thông tin địa chỉ, phương thức thanh toán...
     const response = await fetch(`${API_BASE_URL}/v1/orders/create`, {
       method: "POST",
       headers: getHeaders(),
@@ -177,6 +175,20 @@ export const userService = {
       headers: getHeaders(),
     });
     if (!response.ok) throw new Error('Lỗi khi tải chi tiết đơn hàng');
+    const data: ApiResponse<any> = await response.json();
+    return data.data;
+  },
+
+  cancelOrder: async (userId: number, orderId: number, lyDo?: string) => {
+    const response = await fetch(`${API_BASE_URL}/v1/users/${userId}/orders/${orderId}/cancel`, {
+      method: 'PUT',
+      headers: { ...getHeaders(), 'Content-Type': 'application/json' },
+      body: lyDo ? JSON.stringify({ lyDo }) : undefined,
+    });
+    if (!response.ok) {
+      const err = await response.json();
+      throw new Error(err.message || 'Lỗi khi hủy đơn hàng');
+    }
     const data: ApiResponse<any> = await response.json();
     return data.data;
   },
@@ -592,7 +604,6 @@ export const adminService = {
     return data.data
   },
 
-  // Get available products for counter orders
   // Product APIs
   getProducts: async () => {
     const response = await fetch(`${API_BASE_URL}/v1/san-pham`, {
@@ -610,6 +621,24 @@ export const adminService = {
     });
     if (!response.ok) throw new Error('Không lấy được chi tiết sản phẩm');
     const data: ApiResponse<any> = await response.json();
+    return data.data;
+  },
+
+  uploadImage: async (formData: FormData) => {
+    const token = authService.getToken();
+    const headers: HeadersInit = {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    };
+    const response = await fetch(`${API_BASE_URL}/v1/files/upload`, {
+      method: 'POST',
+      headers,
+      body: formData,
+    });
+    if (!response.ok) {
+      const err = await response.json();
+      throw new Error(err.message || 'Upload thất bại');
+    }
+    const data: ApiResponse<string> = await response.json();
     return data.data;
   },
 
@@ -633,6 +662,21 @@ export const adminService = {
     if (!response.ok) throw new Error('Không cập nhật được sản phẩm');
     const data: ApiResponse<any> = await response.json();
     return data.data;
+  },
+
+  deleteChiTietSanPham: async (id: number) => {
+    const response = await fetch(`${API_BASE_URL}/v1/chi-tiet-san-pham/${id}`, {
+      method: 'DELETE',
+      headers: getHeaders(),
+    });
+    if (!response.ok) throw new Error('Không xóa được biến thể');
+    if (response.status === 204) return true;
+    try {
+      const data: ApiResponse<any> = await response.json();
+      return data.data ?? true;
+    } catch (err) {
+      return true;
+    }
   },
 
   deleteProduct: async (id: number) => {

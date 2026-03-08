@@ -193,6 +193,111 @@
   gap: 16px;
 }
 
+/* Custom checkbox UI */
+.cart-select-all {
+  padding: 6px 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #444;
+  font-weight: 600;
+}
+
+.cart-select-all input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  border-radius: 6px;
+  border: 2px solid #e5e7eb;
+  /* background: white; */
+  display: inline-block;
+  position: relative;
+  cursor: pointer;
+  transition: all 0.12s ease;
+  margin: 0;
+  accent-color: #ff6b35;
+  cursor: pointer;
+  position: relative;
+  -webkit-appearance: none;
+  appearance: none;
+
+}
+
+.cart-select-all input[type="checkbox"]:checked::after {
+  content: "";
+  position: absolute;
+  left: 4px;
+  top: -1px;
+  width: 6px;
+  height: 11px;
+  border: 2px solid white;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+.cart-select-all input[type="checkbox"]:hover {
+  box-shadow: 0 2px 6px rgba(0,0,0,0.06);
+}
+
+.cart-select-all input[type="checkbox"]:checked {
+  background: linear-gradient(135deg, #ff6b35 0%, #ff8c61 100%);
+  border-color: transparent;
+}
+
+
+.cart-item-select {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  padding-right: 8px;
+}
+
+.cart-item-select {
+  height: 100%;
+  padding-right: 12px;
+}
+
+.cart-item-select input[type="checkbox"] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 6px;
+  border: 2px solid #e5e7eb;
+  background: white;
+  display: inline-block;
+  position: relative;
+  cursor: pointer;
+  transition: all 0.12s ease;
+}
+
+.cart-item-select input[type="checkbox"]:hover {
+  box-shadow: 0 2px 6px rgba(0,0,0,0.06);
+}
+
+.cart-item-select input[type="checkbox"]:checked {
+  background: linear-gradient(135deg, #ff6b35 0%, #ff8c61 100%);
+  border-color: transparent;
+}
+
+.cart-item-select input[type="checkbox"]:checked::after {
+  content: "";
+  position: absolute;
+  left: 4px;
+  top: -1px;
+  width: 6px;
+  height: 11px;
+  border: 2px solid white;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+@media (max-width: 600px) {
+  .cart-item-select input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    border-radius: 5px;
+  }
+}
+
 /* Cart Item */
 .modern-cart-item {
   display: flex;
@@ -202,6 +307,7 @@
   border-radius: 16px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
   transition: all 0.2s ease;
+  align-items: center;
 }
 
 .modern-cart-item:hover {

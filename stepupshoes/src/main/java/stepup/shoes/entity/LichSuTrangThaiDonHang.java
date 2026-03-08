@@ -34,5 +34,6 @@ public class LichSuTrangThaiDonHang {
     private NguoiDung nguoiCapNhat;
 
     @Column(name = "NgayCapNhat")
+    @Builder.Default
     private LocalDateTime ngayCapNhat = LocalDateTime.now();
 }

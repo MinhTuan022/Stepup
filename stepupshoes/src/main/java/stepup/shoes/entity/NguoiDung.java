@@ -36,16 +36,31 @@ public class NguoiDung {
     private String diaChi;
 
     @Column(name = "VaiTro", length = 20)
+    @Builder.Default
     private String vaiTro = "khach_hang";
 
     @Column(name = "TrangThai")
+    @Builder.Default
     private Boolean trangThai = true;
 
     @Column(name = "NgayTao")
+    @Builder.Default
     private LocalDateTime ngayTao = LocalDateTime.now();
 
     @Column(name = "NgayCapNhat")
+    @Builder.Default
     private LocalDateTime ngayCapNhat = LocalDateTime.now();
+
+    @Column(name = "DaXoa")
+    @Builder.Default
+    private Boolean daXoa = false;
+
+    @Column(name = "NgayXoa")
+    private LocalDateTime ngayXoa;
+
+    @ManyToOne
+    @JoinColumn(name = "NguoiXoa")
+    private NguoiDung nguoiXoa;
 
     @OneToMany(mappedBy = "nguoiDung", cascade = CascadeType.ALL)
     @ToString.Exclude

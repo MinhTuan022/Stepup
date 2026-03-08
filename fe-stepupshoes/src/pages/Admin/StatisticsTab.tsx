@@ -5,6 +5,15 @@ import './StatisticsTab.css'
 
 const StatisticsTab = () => {
   const { showToast } = useToast()
+  const statusLabels: Record<string, string> = {
+    hoan_thanh: 'Hoàn thành',
+    da_giao_hang: 'Đã giao',
+    dang_giao_hang: 'Đang giao',
+    cho_xac_nhan: 'Chờ xác nhận',
+    chuan_bi_hang: 'Chuẩn bị hàng',
+    huy: 'Đã hủy',
+
+  }
   const [stats, setStats] = useState<any>(null)
   const [revenueStats, setRevenueStats] = useState<any>(null)
   const [topProducts, setTopProducts] = useState<any[]>([])
@@ -149,7 +158,7 @@ const StatisticsTab = () => {
             <ul>
               {Object.entries(revenueStats.revenueByStatus).map(([status, amount]: any) => (
                 <li key={status}>
-                  <span className="status-name">{status}</span>
+                  <span className="status-name">{statusLabels[status] || status}</span>
                   <span className="status-amount">
                     {typeof amount === 'number' ? amount.toLocaleString('vi-VN') : amount} ₫
                   </span>

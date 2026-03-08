@@ -2,6 +2,8 @@
 
 .statistics-tab {
   animation: fadeIn 0.3s ease-in;
+  font-family: Inter, Roboto, 'Segoe UI', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif;
+  color: var(--text-primary);
 }
 
 @keyframes fadeIn {
@@ -28,15 +30,15 @@
 }
 
 .stat-card {
-    background: var(--bg-white);
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius-md);
-    padding: 20px;
-    display: flex;
-    align-items: flex-start;
-    gap: 15px;
-    transition: all 0.3s;
-    box-shadow: var(--shadow-sm);
+  background: var(--bg-white);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 18px;
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  transition: all 0.28s cubic-bezier(.2,.9,.2,1);
+  box-shadow: 0 1px 4px rgba(16,24,40,0.06);
 }
 
 .stat-card:hover {
@@ -50,6 +52,31 @@
     border: none;
 }
 
+/* Muted, professional palette for stat cards */
+.stats-grid .stat-card:nth-child(1) {
+  background: linear-gradient(90deg,#f6fbff 0%, #f0f7ff 100%);
+  border-color: rgba(15, 76, 129, 0.08);
+}
+.stats-grid .stat-card:nth-child(2) {
+  background: linear-gradient(90deg,#fff9f6 0%, #fff3ee 100%);
+  border-color: rgba(129, 63, 15, 0.06);
+}
+.stats-grid .stat-card:nth-child(3) {
+  background: linear-gradient(90deg,#fbfff6 0%, #f6ffef 100%);
+  border-color: rgba(47, 129, 15, 0.06);
+}
+.stats-grid .stat-card:nth-child(4) {
+  /* keep highlight style for total revenue */
+}
+.stats-grid .stat-card:nth-child(5) {
+  background: linear-gradient(90deg,#fffafc 0%, #fff3fb 100%);
+  border-color: rgba(129, 15, 76, 0.06);
+}
+.stats-grid .stat-card:nth-child(6) {
+  background: linear-gradient(90deg,#fbfffd 0%, #f3fff9 100%);
+  border-color: rgba(15, 106, 86, 0.06);
+}
+
 .stat-icon {
   font-size: 32px;
   line-height: 1;
@@ -57,11 +84,11 @@
 
 .stat-content h3 {
   margin: 0 0 8px 0;
-  font-size: 14px;
-  color: var(--text-secondary);
-  font-weight: 500;
+  font-size: 13px;
+  color: rgba(30,41,59,0.75);
+  font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.6px;
 }
 
 .stat-card.highlight .stat-content h3 {
@@ -70,9 +97,10 @@
 
 .stat-value {
   margin: 0;
-  font-size: 28px;
+  font-size: 26px;
   font-weight: 700;
-  color: var(--text-primary);
+  color: rgba(7, 20, 37, 0.95);
+  font-variant-numeric: tabular-nums;
 }
 
 .stat-card.highlight .stat-value {

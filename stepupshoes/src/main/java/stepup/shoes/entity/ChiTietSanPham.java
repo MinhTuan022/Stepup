@@ -37,19 +37,34 @@ public class ChiTietSanPham {
     private BigDecimal giaBan;
 
     @Column(name = "SoLuongTon")
+    @Builder.Default
     private Integer soLuongTon = 0;
 
     @Column(name = "TrangThai")
+    @Builder.Default
     private Boolean trangThai = true;
 
     @Column(name = "HinhAnhChinh", columnDefinition = "NVARCHAR(MAX)")
     private String hinhAnhChinh;
 
     @Column(name = "NgayTao")
+    @Builder.Default
     private LocalDateTime ngayTao = LocalDateTime.now();
 
     @Column(name = "NgayCapNhat")
+    @Builder.Default
     private LocalDateTime ngayCapNhat = LocalDateTime.now();
+
+    @Column(name = "DaXoa")
+    @Builder.Default
+    private Boolean daXoa = false;
+
+    @Column(name = "NgayXoa")
+    private LocalDateTime ngayXoa;
+
+    @ManyToOne
+    @JoinColumn(name = "NguoiXoa")
+    private NguoiDung nguoiXoa;
 
     @OneToMany(mappedBy = "chiTietSanPham", cascade = CascadeType.ALL)
     @ToString.Exclude

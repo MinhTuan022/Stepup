@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { userService } from '../services/api';
 import { useToast } from '../context/ToastContext';
@@ -28,6 +29,8 @@ interface Order {
   soDienThoaiNhan: string;
   ngayDatHang: string;
   chiTietDonHangs: OrderDetail[];
+  lyDoYeuCauHuy?: string;
+  ngayYeuCauHuy?: string;
 }
 
 interface OrderDetail {
@@ -51,6 +54,7 @@ interface UserStats {
 
 const UserProfilePage: React.FC = () => {
   const { user } = useAuth();
+  const location = useLocation();
   const { showToast } = useToast();
   const [activeTab, setActiveTab] = useState<'profile' | 'orders' | 'stats'>('profile');
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -59,6 +63,9 @@ const UserProfilePage: React.FC = () => {
   const [isEditing, setIsEditing] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  const [showCancelModal, setShowCancelModal] = useState(false);
+  const [cancelReason, setCancelReason] = useState('');
+  const [cancelingOrderId, setCancelingOrderId] = useState<number | null>(null);
   const [orderFilter, setOrderFilter] = useState<string>('');
   const [editForm, setEditForm] = useState({
     hoTen: '',
@@ -79,6 +86,30 @@ const UserProfilePage: React.FC = () => {
       loadUserData();
     }
   }, [user]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const tabFromQuery = params.get('tab');
+    const tabFromNav = (location.state as any)?.tab;
+    const validTabs = ['orders', 'profile', 'stats'];
+    if (tabFromQuery && validTabs.includes(tabFromQuery)) {
+      setActiveTab(tabFromQuery as any);
+    } else if (tabFromNav && validTabs.includes(tabFromNav)) {
+      setActiveTab(tabFromNav);
+    }
+  }, [location.state]);
+
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(location.search);
+      if (params.get('tab') !== activeTab) {
+        params.set('tab', activeTab);
+        const newUrl = location.pathname + (params.toString() ? `?${params.toString()}` : '');
+        window.history.replaceState(null, '', newUrl);
+      }
+    } catch (e) {
+    }
+  }, [activeTab, location.pathname, location.search]);
 
   const loadUserData = async () => {
     if (!user) return;
@@ -166,9 +197,12 @@ const UserProfilePage: React.FC = () => {
 
   const getStatusText = (status: string): string => {
     const statusMap: Record<string, string> = {
-      'dat_hang': 'Đặt hàng',
-      'xac_nhan': 'Đã xác nhận',
-      'dang_giao': 'Đang giao',
+      'cho_xac_nhan': 'Chờ xác nhận',
+      'chuan_bi_hang': 'Chuẩn bị hàng',
+      'yeu_cau_huy': 'Yêu cầu hủy',
+      'dang_giao_hang': 'Đang giao',
+      'da_giao_hang': 'Đã giao',
+      'nhan_thanh_cong': 'Nhận thành công',
       'hoan_thanh': 'Hoàn thành',
       'huy': 'Đã hủy',
     };
@@ -177,9 +211,12 @@ const UserProfilePage: React.FC = () => {
 
   const getStatusClass = (status: string): string => {
     const classMap: Record<string, string> = {
-      'dat_hang': 'status-pending',
-      'xac_nhan': 'status-confirmed',
-      'dang_giao': 'status-shipping',
+      'cho_xac_nhan': 'status-pending',
+      'chuan_bi_hang': 'status-preparing',
+      'yeu_cau_huy': 'status-request-cancel',
+      'dang_giao_hang': 'status-shipping',
+      'da_giao_hang': 'status-delivered',
+      'nhan_thanh_cong': 'status-received',
       'hoan_thanh': 'status-completed',
       'huy': 'status-cancelled',
     };
@@ -213,6 +250,8 @@ const UserProfilePage: React.FC = () => {
       </div>
     );
   }
+  
+  
 
   if (isLoading) {
     return (
@@ -409,20 +448,26 @@ const UserProfilePage: React.FC = () => {
                   Tất cả
                 </button>
                 <button 
-                  className={orderFilter === 'dat_hang' ? 'active' : ''}
-                  onClick={() => loadFilteredOrders('dat_hang')}
+                  className={orderFilter === 'cho_xac_nhan' ? 'active' : ''}
+                  onClick={() => loadFilteredOrders('cho_xac_nhan')}
                 >
-                  Đặt hàng
+                  Chờ xác nhận
                 </button>
                 <button 
-                  className={orderFilter === 'xac_nhan' ? 'active' : ''}
-                  onClick={() => loadFilteredOrders('xac_nhan')}
+                  className={orderFilter === 'chuan_bi_hang' ? 'active' : ''}
+                  onClick={() => loadFilteredOrders('chuan_bi_hang')}
                 >
-                  Đã xác nhận
+                  Chuẩn bị hàng
                 </button>
                 <button 
-                  className={orderFilter === 'dang_giao' ? 'active' : ''}
-                  onClick={() => loadFilteredOrders('dang_giao')}
+                  className={orderFilter === 'yeu_cau_huy' ? 'active' : ''}
+                  onClick={() => loadFilteredOrders('yeu_cau_huy')}
+                >
+                  Yêu cầu hủy
+                </button>
+                <button 
+                  className={orderFilter === 'dang_giao_hang' ? 'active' : ''}
+                  onClick={() => loadFilteredOrders('dang_giao_hang')}
                 >
                   Đang giao
                 </button>
@@ -515,6 +560,36 @@ const UserProfilePage: React.FC = () => {
                         >
                           Chi tiết
                         </button>
+                        {order.trangThaiDonHang === 'cho_xac_nhan' && (
+                          <button
+                            className="btn-cancel"
+                            onClick={async () => {
+                              if (!user) return;
+                              if (!window.confirm('Bạn có chắc muốn hủy đơn hàng này?')) return;
+                              try {
+                                await userService.cancelOrder(user.maNguoiDung, order.maDonHang);
+                                showToast('Hủy đơn hàng thành công', 'success');
+                                loadFilteredOrders(orderFilter);
+                              } catch (err) {
+                                showToast(err instanceof Error ? err.message : 'Lỗi khi hủy đơn', 'error');
+                              }
+                            }}
+                          >
+                            Hủy đơn
+                          </button>
+                        )}
+                        {order.trangThaiDonHang === 'chuan_bi_hang' && (
+                          <button
+                            className="btn-cancel-request"
+                            onClick={() => {
+                              setCancelingOrderId(order.maDonHang);
+                              setCancelReason('');
+                              setShowCancelModal(true);
+                            }}
+                          >
+                            Yêu cầu hủy
+                          </button>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -584,6 +659,9 @@ const UserProfilePage: React.FC = () => {
                 <p><strong>Trạng thái:</strong> <span className={`status-badge ${getStatusClass(selectedOrder.trangThaiDonHang)}`}>{getStatusText(selectedOrder.trangThaiDonHang)}</span></p>
                 <p><strong>Thanh toán:</strong> {selectedOrder.phuongThucThanhToan}</p>
                 <p><strong>Trạng thái thanh toán:</strong> {selectedOrder.trangThaiThanhToan}</p>
+                {selectedOrder.lyDoYeuCauHuy && (
+                  <p><strong>Lý do yêu cầu hủy:</strong> {selectedOrder.lyDoYeuCauHuy} {selectedOrder.ngayYeuCauHuy ? <span>— {formatDate(selectedOrder.ngayYeuCauHuy)}</span> : null}</p>
+                )}
               </div>
 
               <div className="order-detail-info">
@@ -630,6 +708,45 @@ const UserProfilePage: React.FC = () => {
                   <span>{formatCurrency(selectedOrder.thanhTien)}</span>
                 </div>
               </div>
+            </div>
+              </div>
+        </div>
+      )}
+      {showCancelModal && (
+        <div className="order-modal" onClick={() => setShowCancelModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Yêu cầu hủy đơn #{cancelingOrderId}</h2>
+              <button className="btn-close" onClick={() => setShowCancelModal(false)}>×</button>
+            </div>
+            <div className="modal-body">
+              <div className="form-group">
+                <label>Lý do hủy (tùy chọn):</label>
+                <textarea value={cancelReason} onChange={(e) => setCancelReason(e.target.value)} rows={4} />
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn-cancel" onClick={() => setShowCancelModal(false)}>Đóng</button>
+              <button
+                className="btn-submit"
+                              onClick={async () => {
+                                if (!user || !cancelingOrderId) return;
+                                try {
+                                  await userService.cancelOrder(user.maNguoiDung, cancelingOrderId, cancelReason || undefined);
+                                  showToast('Yêu cầu hủy đã được gửi', 'success');
+                                  setShowCancelModal(false);
+                                  setCancelReason('');
+                                  setCancelingOrderId(null);
+                                  // switch to "Yêu cầu hủy" filter so the order remains visible to the customer
+                                  setOrderFilter('yeu_cau_huy');
+                                  loadFilteredOrders('yeu_cau_huy');
+                                } catch (err) {
+                                  showToast(err instanceof Error ? err.message : 'Lỗi khi gửi yêu cầu hủy', 'error');
+                                }
+                              }}
+              >
+                Gửi yêu cầu
+              </button>
             </div>
           </div>
         </div>

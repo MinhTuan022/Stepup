@@ -30,5 +30,6 @@ public class GioHang {
     private Integer soLuong;
 
     @Column(name = "NgayThem")
+    @Builder.Default
     private LocalDateTime ngayThem = LocalDateTime.now();
 }

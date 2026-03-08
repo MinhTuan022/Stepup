@@ -7,16 +7,9 @@ export const AuthContext = createContext<AuthContextType | undefined>(undefined)
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
-  const [user, setUser] = useState<JwtResponse | null>(null)
+  const [user, setUser] = useState<JwtResponse | null>(() => authService.getUser())
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    const storedUser = authService.getUser()
-    if (storedUser) {
-      setUser(storedUser)
-    }
-  }, [])
 
   const login = useCallback(async (credentials: LoginRequest) => {
     setIsLoading(true)

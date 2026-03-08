@@ -20,21 +20,26 @@ public class DanhMucService {
     public DanhMucDTO getDanhMucById(Integer maDanhMuc) {
         DanhMuc danhMuc = danhMucRepository.findById(maDanhMuc)
                 .orElseThrow(() -> new ResourceNotFoundException("Danh mục không tìm thấy với ID: " + maDanhMuc));
+        if (Boolean.TRUE.equals(danhMuc.getDaXoa())) {
+            throw new ResourceNotFoundException("Danh mục không tìm thấy với ID: " + maDanhMuc);
+        }
         return mapToDTO(danhMuc);
     }
 
     public List<DanhMucDTO> getAllDanhMuc() {
         return danhMucRepository.findAll()
-                .stream()
-                .map(this::mapToDTO)
-                .collect(Collectors.toList());
+            .stream()
+            .filter(dm -> !Boolean.TRUE.equals(dm.getDaXoa()))
+            .map(this::mapToDTO)
+            .collect(Collectors.toList());
     }
 
     public List<DanhMucDTO> getDanhMucActive() {
         return danhMucRepository.findByTrangThaiTrue()
-                .stream()
-                .map(this::mapToDTO)
-                .collect(Collectors.toList());
+            .stream()
+            .filter(dm -> !Boolean.TRUE.equals(dm.getDaXoa()))
+            .map(this::mapToDTO)
+            .collect(Collectors.toList());
     }
 
     public DanhMucDTO createDanhMuc(DanhMucDTO danhMucDTO) {
@@ -66,7 +71,9 @@ public class DanhMucService {
     public void deleteDanhMuc(Integer maDanhMuc) {
         DanhMuc danhMuc = danhMucRepository.findById(maDanhMuc)
                 .orElseThrow(() -> new ResourceNotFoundException("Danh mục không tìm thấy với ID: " + maDanhMuc));
-        danhMucRepository.delete(danhMuc);
+        danhMuc.setDaXoa(true);
+        danhMuc.setNgayXoa(LocalDateTime.now());
+        danhMucRepository.save(danhMuc);
     }
 
     private DanhMucDTO mapToDTO(DanhMuc danhMuc) {

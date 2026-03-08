@@ -4,6 +4,7 @@ import { useToast } from "../context/ToastContext";
 import { useParams, useNavigate } from "react-router-dom";
 import { adminService } from "../services/api";
 import "./ProductDetailPage.css";
+import { BASE_IMAGE_URL } from "../constants";
 
 interface HinhAnhChiTietDTO {
   duongDan: string;
@@ -150,7 +151,7 @@ export const ProductDetailPage = () => {
             <div className="image-gallery-modern">
               <div className="main-image-display">
                 <img
-                  src={currentImage?.duongDan}
+                  src={`${BASE_IMAGE_URL}${currentImage?.duongDan}`}
                   alt={product.tenSanPham}
                   className="main-display-image"
                 />
@@ -169,7 +170,7 @@ export const ProductDetailPage = () => {
                       className={`thumbnail ${idx === selectedImageIndex ? "active" : ""}`}
                       onClick={() => setSelectedImageIndex(idx)}
                     >
-                      <img src={img.duongDan} alt={`${product.tenSanPham} ${idx + 1}`} />
+                      <img src={`${BASE_IMAGE_URL}${img.duongDan}`} alt={`${product.tenSanPham} ${idx + 1}`} />
                     </div>
                   ))}
                 </div>

@@ -311,6 +311,8 @@ export const CategoryPage = () => {
           <div className="filter-section">
             <label className="filter-label">Khoảng giá</label>
             <div className="price-inputs">
+              <span>Từ</span>
+
               <input
                 type="number"
                 placeholder="Từ"
@@ -322,7 +324,7 @@ export const CategoryPage = () => {
                   }))
                 }
               />
-              <span>-</span>
+              <span>Đến</span>
               <input
                 type="number"
                 placeholder="Đến"
@@ -571,3 +573,5 @@ export const CategoryPage = () => {
     </div>
   );
 };
+
+export default CategoryPage;

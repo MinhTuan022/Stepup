@@ -2,6 +2,7 @@ import React, { useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import Cart from './Cart';
 import { Header } from './Header';
+import Footer from './Footer';
 
 export interface CartRef {
   open: () => void;
@@ -29,6 +30,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
     <>
       {!shouldHideHeader && <Header onCartOpen={handleCartOpen} />}
       {children}
+      <Footer />
       <Cart ref={cartRef} />
     </>
   );

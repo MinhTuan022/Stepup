@@ -34,12 +34,14 @@ public class Voucher {
     private BigDecimal giamToiDa;
 
     @Column(name = "GiaTriToiThieu", precision = 18, scale = 2)
+    @Builder.Default
     private BigDecimal giaTriToiThieu = BigDecimal.ZERO;
 
     @Column(name = "SoLuong")
     private Integer soLuong;
 
     @Column(name = "SoLuongDaDung")
+    @Builder.Default
     private Integer soLuongDaDung = 0;
 
     @Column(name = "NgayBatDau", nullable = false)
@@ -49,10 +51,23 @@ public class Voucher {
     private LocalDateTime ngayKetThuc;
 
     @Column(name = "TrangThai")
+    @Builder.Default
     private Boolean trangThai = true;
 
     @Column(name = "NgayTao")
+    @Builder.Default
     private LocalDateTime ngayTao = LocalDateTime.now();
+
+    @Column(name = "DaXoa")
+    @Builder.Default
+    private Boolean daXoa = false;
+
+    @Column(name = "NgayXoa")
+    private LocalDateTime ngayXoa;
+
+    @ManyToOne
+    @JoinColumn(name = "NguoiXoa")
+    private NguoiDung nguoiXoa;
 
     @OneToMany(mappedBy = "voucher", cascade = CascadeType.ALL)
     @ToString.Exclude

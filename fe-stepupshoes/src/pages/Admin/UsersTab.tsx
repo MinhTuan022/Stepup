@@ -29,6 +29,7 @@ const UsersTab = () => {
   const [page, setPage] = useState(0);
   const [pageSize, setPageSize] = useState(10);
   const [totalPages, setTotalPages] = useState(0);
+  const [totalUsers, setTotalUsers] = useState(0);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -75,6 +76,7 @@ const UsersTab = () => {
       const data = await adminService.getAllUsers(page, pageSize);
       setUsers(data.users || []);
       setTotalPages(data.totalPages || 0);
+      setTotalUsers(data.totalUsers || 0);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Lỗi khi tải dữ liệu");
     } finally {
@@ -119,7 +121,7 @@ const UsersTab = () => {
   const handleDeleteUser = async (id: number) => {
     if (
       !confirm(
-        "Bạn có chắc muốn xóa tài khoản này? Hành động này không thể hoàn tác.",
+        "Bạn có chắc muốn xóa tài khoản này? ",
       )
     )
       return;
@@ -177,7 +179,7 @@ const UsersTab = () => {
       <div className="tab-header">
         <div>
           <h2>Quản lý người dùng</h2>
-          <p>Tổng số người dùng: {users.length}</p>
+          <p>Tổng số người dùng: {totalUsers}</p>
         </div>
         {currentUser?.vaiTro === "quan_tri" && (
           <button

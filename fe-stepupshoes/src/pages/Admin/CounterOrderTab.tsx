@@ -49,6 +49,8 @@ interface CounterOrder {
   phiVanChuyen: number
   giamGia: number
   thanhTien: number
+  trangThaiDonHang?: string
+  trangThaiThanhToan?: string
 }
 
 const CounterOrderTab: React.FC = () => {
@@ -81,12 +83,10 @@ const CounterOrderTab: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false)
   const [showProductModal, setShowProductModal] = useState(false)
 
-  // Load danh sách sản phẩm khi component mount
   useEffect(() => {
     loadProducts()
   }, [])
 
-  // Load chi tiết sản phẩm khi chọn sản phẩm
   useEffect(() => {
     if (selectedProduct) {
       loadProductDetails(selectedProduct)
@@ -111,7 +111,6 @@ const CounterOrderTab: React.FC = () => {
     }
   }
 
-  // Tìm kiếm khách hàng theo số điện thoại
   const searchCustomerByPhone = async (phone: string) => {
     if (!phone.trim() || phone.length < 10) return
     
@@ -143,7 +142,6 @@ const CounterOrderTab: React.FC = () => {
       }
     } catch (error) {
       setMaNguoiDung(0)
-      // Không hiển thị lỗi nếu không tìm thấy
     } finally {
       setIsSearchingCustomer(false)
     }
@@ -356,9 +354,25 @@ const CounterOrderTab: React.FC = () => {
 
     setIsLoading(true)
     try {
+      // Finalize on backend (may set payment/status). Still enforce both updates to be safe.
       await adminService.finalizeCounterOrder(currentOrder.maDonHang, 'tien_mat')
-      showToast('Hoàn thành đơn hàng thành công', 'success')
-      
+
+      // Ensure order status = hoan_thanh
+      try {
+        await adminService.updateOrderStatus(currentOrder.maDonHang, 'hoan_thanh')
+      } catch (err) {
+        console.error('Lỗi khi cập nhật trạng thái đơn sau finalize:', err)
+      }
+
+      // Ensure payment status = da_thanh_toan
+      try {
+        await adminService.updateOrder(currentOrder.maDonHang, { trangThaiThanhToan: 'da_thanh_toan' })
+      } catch (err) {
+        console.error('Lỗi khi cập nhật trạng thái thanh toán sau finalize:', err)
+      }
+
+      showToast('Hoàn thành và thanh toán đơn hàng thành công', 'success')
+
       // Reset form
       setCurrentOrder(null)
       setOrderItems([])
@@ -375,19 +389,63 @@ const CounterOrderTab: React.FC = () => {
   }
 
   // Hủy đơn hàng
-  const handleCancelOrder = () => {
+  const handleCancelOrder = async () => {
+    if (!currentOrder) return
+
+    const cancelable = ['cho_xac_nhan', 'chuan_bi_hang']
+    if (!cancelable.includes(currentOrder.trangThaiDonHang || '')) {
+      showToast('Không thể hủy đơn hàng ở trạng thái hiện tại', 'error')
+      return
+    }
+
     if (!window.confirm('Bạn có chắc muốn hủy đơn hàng này?')) return
-    
-    setCurrentOrder(null)
-    setOrderItems([])
-    setNguoiNhan('')
-    setSoDienThoaiNhan('')
-    setMaNguoiDung(0)
-    setVoucherCode('')
-    setAppliedVoucher(false)
-    setCustomerType('guest')
-    showToast('Đã hủy đơn hàng', 'info')
+
+    setIsLoading(true)
+    try {
+      await adminService.updateOrderStatus(currentOrder.maDonHang, 'huy')
+      showToast('Đã hủy đơn hàng', 'info')
+      // reload/clear local state
+      setCurrentOrder(null)
+      setOrderItems([])
+      setNguoiNhan('')
+      setSoDienThoaiNhan('')
+      setMaNguoiDung(0)
+      setVoucherCode('')
+      setAppliedVoucher(false)
+      setCustomerType('guest')
+    } catch (error: any) {
+      showToast(error.message || 'Lỗi khi hủy đơn', 'error')
+    } finally {
+      setIsLoading(false)
+    }
   }
+
+  // Các trạng thái cho phép hủy tại quầy
+  const cancelableCounterStates = ['cho_xac_nhan', 'chuan_bi_hang']
+
+  React.useEffect(() => {
+    let isUnmounting = false
+
+    const tryCancelOnUnload = () => {
+      if (!currentOrder) return
+      if (!cancelableCounterStates.includes(currentOrder.trangThaiDonHang || '')) return
+      adminService.updateOrderStatus(currentOrder.maDonHang, 'huy').catch((err) => {
+        console.error('Không thể hủy đơn trên unload:', err)
+      })
+    }
+
+    const beforeUnloadHandler = () => {
+      tryCancelOnUnload()
+    }
+
+    window.addEventListener('beforeunload', beforeUnloadHandler)
+
+    return () => {
+      isUnmounting = true
+      tryCancelOnUnload()
+      window.removeEventListener('beforeunload', beforeUnloadHandler)
+    }
+  }, [currentOrder])
 
   // Format tiền tệ
   const formatCurrency = (amount: number) => {
@@ -585,7 +643,7 @@ const CounterOrderTab: React.FC = () => {
             <button
               className="btn btn-danger"
               onClick={handleCancelOrder}
-              disabled={isLoading}
+              disabled={isLoading || !(currentOrder && ['cho_xac_nhan', 'chuan_bi_hang'].includes(currentOrder.trangThaiDonHang || ''))}
             >
               Hủy Đơn
             </button>

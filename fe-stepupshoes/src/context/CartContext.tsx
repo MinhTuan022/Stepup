@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { useAuth } from "./AuthContext";
+import { useToast } from "./ToastContext";
 import { cartService } from "../services/api";
 
 export interface CartItem {
@@ -31,6 +32,7 @@ export const useCart = () => {
 
 export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user } = useAuth();
+  const { showToast } = useToast();
   const [cart, setCart] = useState<CartItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -59,8 +61,10 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       await cartService.addToCart(user.maNguoiDung, maChiTiet, soLuong);
       await fetchCart();
+      showToast && showToast('Thêm vào giỏ hàng thành công', 'success');
     } catch (err) {
       setError("Lỗi khi thêm vào giỏ hàng");
+      showToast && showToast('Thêm vào giỏ hàng thất bại', 'error');
     } finally {
       setLoading(false);
     }

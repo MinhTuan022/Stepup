@@ -6,7 +6,6 @@ import { LoginPage } from './pages/LoginPage'
 import { RegisterPage } from './pages/RegisterPage'
 import { HomePage } from './pages/HomePage'
 import { ProductDetailPage } from './pages/ProductDetailPage'
-import { CategoryPage } from './pages/CategoryPage'
 import CheckoutPage from './pages/CheckoutPage'
 import AdminDashboard from './pages/Admin/AdminDashboard'
 import UserProfilePage from './pages/UserProfilePage'
@@ -15,6 +14,8 @@ import ContactPage from './pages/ContactPage'
 import Layout from './components/Layout'
 import './App.css'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import ScrollRestoration from './components/ScrollRestoration'
+import CategoryPage from './pages/CategoryPage'
 
 
 function AppContent() {
@@ -61,6 +62,7 @@ function App() {
       <ToastProvider>
         <CartProvider>
           <BrowserRouter>
+            <ScrollRestoration />
             <AppContent />
           </BrowserRouter>
         </CartProvider>
