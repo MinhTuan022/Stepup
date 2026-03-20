@@ -153,6 +153,33 @@ public class AdminController {
                 .body(new ApiResponseDTO<>(true, "Tạo đơn hàng tại quầy thành công", newOrder));
     }
 
+    @PostMapping("/orders/{id}/lock")
+    @Operation(summary = "Khoá đơn tại quầy", description = "Khoá đơn để một cashier giữ và thao tác (POS lock)")
+    public ResponseEntity<ApiResponseDTO<String>> lockOrder(@PathVariable Integer id,
+                                                            @RequestBody(required = false) java.util.Map<String, Integer> body) {
+        Integer cashierId = null;
+        if (body != null && body.get("cashierId") != null) cashierId = body.get("cashierId");
+        adminService.lockOrder(id, cashierId);
+        return ResponseEntity.ok(new ApiResponseDTO<>(true, "Đã khoá đơn", null));
+    }
+
+    @PostMapping("/orders/{id}/lock/touch")
+    @Operation(summary = "Touch lock", description = "Gia hạn lock (heartbeat) cho đơn đang được giữ)")
+    public ResponseEntity<ApiResponseDTO<String>> touchOrderLock(@PathVariable Integer id) {
+        adminService.touchOrderLock(id);
+        return ResponseEntity.ok(new ApiResponseDTO<>(true, "Lock touched", null));
+    }
+
+    @PostMapping("/orders/{id}/lock/release")
+    @Operation(summary = "Release lock", description = "Giải phóng lock khỏi đơn")
+    public ResponseEntity<ApiResponseDTO<String>> releaseOrderLock(@PathVariable Integer id,
+                                                                    @RequestBody(required = false) java.util.Map<String, Integer> body) {
+        Integer cashierId = null;
+        if (body != null && body.get("cashierId") != null) cashierId = body.get("cashierId");
+        adminService.releaseOrderLock(id, cashierId);
+        return ResponseEntity.ok(new ApiResponseDTO<>(true, "Đã giải phóng lock", null));
+    }
+
     @PostMapping("/orders/{id}/items")
     @Operation(summary = "Thêm sản phẩm vào đơn", description = "Thêm chi tiết sản phẩm vào đơn hàng tại quầy")
     public ResponseEntity<ApiResponseDTO<DonHangDTO>> addItemToOrder(
@@ -295,8 +322,10 @@ public class AdminController {
     @GetMapping("/statistics/top-products")
     @Operation(summary = "Sản phẩm bán chạy", description = "Lấy danh sách sản phẩm bán chạy nhất")
     public ResponseEntity<ApiResponseDTO<List<Map<String, Object>>>> getTopProducts(
-            @RequestParam(defaultValue = "10") int limit) {
-        List<Map<String, Object>> topProducts = adminService.getTopProducts(limit);
+            @RequestParam(defaultValue = "10") int limit,
+            @RequestParam(required = false) String fromDate,
+            @RequestParam(required = false) String toDate) {
+        List<Map<String, Object>> topProducts = adminService.getTopProducts(limit, fromDate, toDate);
         return ResponseEntity.ok(
             new ApiResponseDTO<>(true, "Lấy danh sách sản phẩm bán chạy thành công", topProducts)
         );

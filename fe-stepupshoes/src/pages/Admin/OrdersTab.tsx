@@ -149,13 +149,14 @@ const OrdersTab = () => {
         return
       }
 
-      // Confirmations
+      const fromLabel = statusLabels[order.trangThaiDonHang] || order.trangThaiDonHang
+      const toLabel = statusLabels[newStatus] || newStatus
+      const confirmMsg = `Xác nhận chuyển trạng thái đơn hàng từ "${fromLabel}" → "${toLabel}"?`
+
       if (newStatus === 'huy') {
         if (!confirm('Bạn có chắc muốn hủy đơn hàng này?')) return
-      }
-
-      if (newStatus === 'hoan_thanh') {
-        if (!confirm('Xác nhận đơn hàng đã hoàn thành?')) return
+      } else if (!confirm(confirmMsg)) {
+        return
       }
 
       await adminService.updateOrderStatus(orderId, newStatus)

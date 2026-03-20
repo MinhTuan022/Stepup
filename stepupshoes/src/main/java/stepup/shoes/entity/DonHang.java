@@ -88,4 +88,10 @@ public class DonHang {
     @OneToMany(mappedBy = "donHang", cascade = CascadeType.ALL)
     @ToString.Exclude
     private List<LichSuVoucher> lichSuVouchers;
+
+    @Column(name = "LockedBy")
+    private Integer lockedBy;
+
+    @Column(name = "LockedAt")
+    private java.time.LocalDateTime lockedAt;
 }

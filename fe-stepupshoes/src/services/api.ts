@@ -235,6 +235,19 @@ export const userService = {
     const data: ApiResponse<any> = await response.json();
     return data.data;
   },
+  getApplicableVouchers: async (userId: number, tongTien: number) => {
+    const response = await fetch(`${API_BASE_URL}/v1/users/${userId}/applicable-vouchers`, {
+      method: 'POST',
+      headers: getHeaders(),
+      body: JSON.stringify({ tongTien }),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => null);
+      throw new Error((err && err.message) || 'Lỗi khi lấy danh sách voucher');
+    }
+    const data: ApiResponse<any> = await response.json();
+    return data.data;
+  },
 };
 
 // Admin Services
@@ -259,11 +272,11 @@ export const adminService = {
     return data.data
   },
 
-  getTopProducts: async (limit: number = 10) => {
-    const response = await fetch(
-      `${API_BASE_URL}/v1/admin/statistics/top-products?limit=${limit}`,
-      { headers: getHeaders() }
-    )
+  getTopProducts: async (limit: number = 10, fromDate?: string, toDate?: string) => {
+    let url = `${API_BASE_URL}/v1/admin/statistics/top-products?limit=${limit}`;
+    if (fromDate) url += `&fromDate=${fromDate}`;
+    if (toDate) url += `&toDate=${toDate}`;
+    const response = await fetch(url, { headers: getHeaders() })
     if (!response.ok) throw new Error('Failed to fetch top products')
     const data: ApiResponse<any> = await response.json()
     return data.data
@@ -599,6 +612,45 @@ export const adminService = {
     if (!response.ok) {
       const error = await response.json()
       throw new Error(error.message || 'Failed to finalize order')
+    }
+    const data: ApiResponse<any> = await response.json()
+    return data.data
+  },
+
+  // Lock / Heartbeat
+  lockCounterOrder: async (orderId: number, cashierId: number) => {
+    const response = await fetch(`${API_BASE_URL}/v1/admin/orders/${orderId}/lock`, {
+      method: 'POST',
+      headers: getHeaders(),
+      body: JSON.stringify({ cashierId }),
+    })
+    if (!response.ok) {
+      const error = await response.json().catch(() => null)
+      throw new Error((error && error.message) || 'Failed to lock order')
+    }
+    const data: ApiResponse<any> = await response.json()
+    return data.data
+  },
+
+  touchCounterOrderLock: async (orderId: number) => {
+    const response = await fetch(`${API_BASE_URL}/v1/admin/orders/${orderId}/lock/touch`, {
+      method: 'POST',
+      headers: getHeaders(),
+    })
+    if (!response.ok) return null
+    const data: ApiResponse<any> = await response.json()
+    return data.data
+  },
+
+  releaseCounterOrderLock: async (orderId: number, cashierId?: number) => {
+    const response = await fetch(`${API_BASE_URL}/v1/admin/orders/${orderId}/lock/release`, {
+      method: 'POST',
+      headers: getHeaders(),
+      body: JSON.stringify({ cashierId }),
+    })
+    if (!response.ok) {
+      const error = await response.json().catch(() => null)
+      throw new Error((error && error.message) || 'Failed to release order lock')
     }
     const data: ApiResponse<any> = await response.json()
     return data.data

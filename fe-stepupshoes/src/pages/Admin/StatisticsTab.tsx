@@ -23,6 +23,10 @@ const StatisticsTab = () => {
     fromDate: new Date(new Date().getFullYear(), 0, 1).toISOString().split('T')[0],
     toDate: new Date().toISOString().split('T')[0],
   })
+  const [topRange, setTopRange] = useState({
+    fromDate: new Date(new Date().getFullYear(), 0, 1).toISOString().split('T')[0],
+    toDate: new Date().toISOString().split('T')[0],
+  })
 
   useEffect(() => {
     fetchStatistics()
@@ -38,7 +42,7 @@ const StatisticsTab = () => {
       setError(null)
       const [statsData, productsData] = await Promise.all([
         adminService.getStatistics(),
-        adminService.getTopProducts(10),
+        adminService.getTopProducts(10, topRange.fromDate, topRange.toDate),
       ])
       setStats(statsData)
       setTopProducts(productsData || [])
@@ -49,6 +53,17 @@ const StatisticsTab = () => {
       showToast(message, 'error')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const fetchTopProducts = async () => {
+    try {
+      const data = await adminService.getTopProducts(10, topRange.fromDate, topRange.toDate)
+      setTopProducts(data || [])
+      showToast('Tải sản phẩm bán chạy thành công', 'success')
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Lỗi khi tải sản phẩm bán chạy'
+      showToast(message, 'error')
     }
   }
 
@@ -116,6 +131,37 @@ const StatisticsTab = () => {
         </div>
       </div>
 
+      <div className="low-stock-section">
+        <h3>Sản phẩm sắp hết hàng</h3>
+        {stats?.lowStockCount > 0 ? (
+          <div>
+            <p className="low-stock-count">Có {stats.lowStockCount} mục sắp hết hàng</p>
+            <table className="low-stock-table">
+              <thead>
+                <tr>
+                  <th>STT</th>
+                  <th>Tên sản phẩm</th>
+                  <th>Mã chi tiết</th>
+                  <th>Tồn kho</th>
+                </tr>
+              </thead>
+              <tbody>
+                {stats.lowStockProducts.map((p: any, idx: number) => (
+                  <tr key={p.maChiTiet || idx}>
+                    <td>{idx + 1}</td>
+                    <td>{p.tenSanPham}</td>
+                    <td>{p.maChiTiet}</td>
+                    <td className="quantity">{p.soLuongTon}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p className="no-data">Không có sản phẩm sắp hết hàng</p>
+        )}
+      </div>
+
       <div className="revenue-section">
         <h3>Doanh thu theo khoảng thời gian</h3>
         <div className="date-range">
@@ -171,6 +217,27 @@ const StatisticsTab = () => {
 
       <div className="top-products-section">
         <h3>Sản phẩm bán chạy nhất</h3>
+        <div className="date-range top-products-range">
+          <div className="date-input-group">
+            <label>Từ ngày:</label>
+            <input
+              type="date"
+              value={topRange.fromDate}
+              onChange={(e) => setTopRange({ ...topRange, fromDate: e.target.value })}
+            />
+          </div>
+          <div className="date-input-group">
+            <label>Đến ngày:</label>
+            <input
+              type="date"
+              value={topRange.toDate}
+              onChange={(e) => setTopRange({ ...topRange, toDate: e.target.value })}
+            />
+          </div>
+          <div className="date-input-group">
+            <button className="filter-button" onClick={fetchTopProducts}>Lọc</button>
+          </div>
+        </div>
         {topProducts.length > 0 ? (
           <table className="products-table">
             <thead>

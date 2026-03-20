@@ -136,6 +136,46 @@ public class AdminService {
         return convertToDonHangDTO(order);
     }
 
+    public void lockOrder(Integer orderId, Integer cashierId) {
+        DonHang order = donHangRepository.findById(orderId)
+                .orElseThrow(() -> new ResourceNotFoundException("Đơn hàng không tồn tại"));
+
+        Integer currentLocker = order.getLockedBy();
+        java.time.LocalDateTime now = java.time.LocalDateTime.now();
+        if (currentLocker != null && !currentLocker.equals(cashierId)) {
+            throw new IllegalStateException("Đơn đang được giữ bởi cashier khác");
+        }
+        order.setLockedBy(cashierId);
+        order.setLockedAt(now);
+        order.setNgayCapNhat(now);
+        donHangRepository.save(order);
+    }
+
+    public void touchOrderLock(Integer orderId) {
+        DonHang order = donHangRepository.findById(orderId)
+                .orElseThrow(() -> new ResourceNotFoundException("Đơn hàng không tồn tại"));
+        if (order.getLockedBy() == null) {
+            return;
+        }
+        order.setLockedAt(java.time.LocalDateTime.now());
+        order.setNgayCapNhat(java.time.LocalDateTime.now());
+        donHangRepository.save(order);
+    }
+
+    public void releaseOrderLock(Integer orderId, Integer cashierId) {
+        DonHang order = donHangRepository.findById(orderId)
+                .orElseThrow(() -> new ResourceNotFoundException("Đơn hàng không tồn tại"));
+        Integer currentLocker = order.getLockedBy();
+        if (currentLocker == null) return; // already released
+        if (cashierId != null && !cashierId.equals(currentLocker)) {
+            throw new IllegalStateException("Chỉ cashier đang giữ mới có thể giải phóng lock");
+        }
+        order.setLockedBy(null);
+        order.setLockedAt(null);
+        order.setNgayCapNhat(java.time.LocalDateTime.now());
+        donHangRepository.save(order);
+    }
+
     public DonHangDTO updateOrderStatus(Integer id, String status) {
         DonHang order = donHangRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Đơn hàng không tồn tại"));
@@ -155,9 +195,9 @@ public class AdminService {
             }
             order.setTrangThaiDonHang(status);
             try {
-                if (!"tai_quay".equals(order.getLoaiDonHang())) {
-                    restoreInventoryAfterCancel(order.getMaDonHang());
-                }
+                // Always attempt to restore inventory for remaining items in the order.
+                // For counter orders we decrement stock on add, so we must restore on cancel as well.
+                restoreInventoryAfterCancel(order.getMaDonHang());
             } catch (Exception ex) {
                 System.err.println("Failed to restore inventory after cancel: " + ex.getMessage());
             }
@@ -315,6 +355,17 @@ public class AdminService {
         
         chiTietDonHangRepository.save(chiTietDonHang);
         
+        // Nếu là đơn tại quầy, giảm tồn kho ngay khi thêm sản phẩm
+        try {
+            Integer available = chiTietSanPham.getSoLuongTon() == null ? 0 : chiTietSanPham.getSoLuongTon();
+            chiTietSanPham.setSoLuongTon(available - chiTietDonHang.getSoLuong());
+            if (chiTietSanPham.getSoLuongTon() <= 0) chiTietSanPham.setTrangThai(false);
+            chiTietSanPham.setNgayCapNhat(LocalDateTime.now());
+            chiTietSanPhamRepository.save(chiTietSanPham);
+        } catch (Exception ex) {
+            System.err.println("Failed to decrement stock for counter order: " + ex.getMessage());
+        }
+        
         // Cập nhật tổng tiền đơn hàng
         updateOrderTotals(donHangId);
         
@@ -335,7 +386,20 @@ public class AdminService {
                 .orElseThrow(() -> new ResourceNotFoundException("Sản phẩm không có trong đơn hàng"));
         
         donHang.getChiTietDonHangs().remove(itemToRemove);
-        
+
+        // Khi xóa sản phẩm khỏi đơn (bao gồm đơn tại quầy), hoàn lại tồn kho tương ứng
+        try {
+            ChiTietSanPham chiTietSanPham = itemToRemove.getChiTietSanPham();
+            int restored = itemToRemove.getSoLuong();
+            int newQty = (chiTietSanPham.getSoLuongTon() == null ? 0 : chiTietSanPham.getSoLuongTon()) + restored;
+            chiTietSanPham.setSoLuongTon(newQty);
+            if (newQty > 0) chiTietSanPham.setTrangThai(true);
+            chiTietSanPham.setNgayCapNhat(LocalDateTime.now());
+            chiTietSanPhamRepository.save(chiTietSanPham);
+        } catch (Exception ex) {
+            System.err.println("Failed to restore stock when removing item: " + ex.getMessage());
+        }
+
         chiTietDonHangRepository.delete(itemToRemove);
         chiTietDonHangRepository.flush(); 
         
@@ -605,6 +669,24 @@ public class AdminService {
         overview.put("activeProducts", activeProducts);
         overview.put("totalRevenue", totalRevenue);
         overview.put("ordersThisMonth", ordersThisMonth);
+
+        // Low stock products (chi tiết sản phẩm with remaining quantity < 10)
+        List<ChiTietSanPham> allDetails = chiTietSanPhamRepository.findAll();
+        List<Map<String, Object>> lowStockList = allDetails.stream()
+            .filter(ChiTietSanPham::getTrangThai)
+            .filter(detail -> detail.getSoLuongTon() != null && detail.getSoLuongTon() < 10)
+            .map(detail -> {
+                Map<String, Object> item = new HashMap<>();
+                item.put("maChiTiet", detail.getMaChiTiet());
+                item.put("maSanPham", detail.getSanPham().getMaSanPham());
+                item.put("tenSanPham", detail.getSanPham().getTenSanPham());
+                item.put("soLuongTon", detail.getSoLuongTon());
+                return item;
+            })
+            .collect(Collectors.toList());
+
+        overview.put("lowStockProducts", lowStockList);
+        overview.put("lowStockCount", lowStockList.size());
         
         return overview;
     }
@@ -708,19 +790,49 @@ public class AdminService {
         return userStats;
     }
 
-    public List<Map<String, Object>> getTopProducts(int limit) {
+    public List<Map<String, Object>> getTopProducts(int limit, String fromDate, String toDate) {
         Map<Integer, Integer> productSalesMap = new HashMap<>();
         Map<Integer, SanPham> productMap = new HashMap<>();
-        
-        donHangRepository.findAll().stream()
+
+        List<DonHang> allOrders = donHangRepository.findAll();
+
+        // Parse optional date range (format: yyyy-MM-dd)
+        LocalDateTime from = null;
+        LocalDateTime to = null;
+        DateTimeFormatter fmt = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+        try {
+            if (fromDate != null && !fromDate.isEmpty()) {
+                LocalDate ld = LocalDate.parse(fromDate, fmt);
+                from = ld.atStartOfDay();
+            }
+            if (toDate != null && !toDate.isEmpty()) {
+                LocalDate ld = LocalDate.parse(toDate, fmt);
+                to = ld.atTime(23, 59, 59);
+            }
+        } catch (Exception e) {
+            from = null;
+            to = null;
+        }
+
+        final LocalDateTime start = from;
+        final LocalDateTime end = to;
+
+        allOrders.stream()
+                .filter(order -> {
+                    LocalDateTime ngay = order.getNgayDatHang();
+                    if (ngay == null) return false;
+                    boolean afterFrom = (start == null) || !ngay.isBefore(start);
+                    boolean beforeTo = (end == null) || !ngay.isAfter(end);
+                    return afterFrom && beforeTo;
+                })
                 .flatMap(order -> order.getChiTietDonHangs().stream())
                 .forEach(detail -> {
                     Integer maSanPham = detail.getChiTietSanPham().getSanPham().getMaSanPham();
-                    productSalesMap.put(maSanPham, 
-                        productSalesMap.getOrDefault(maSanPham, 0) + detail.getSoLuong());
+                    productSalesMap.put(maSanPham,
+                            productSalesMap.getOrDefault(maSanPham, 0) + detail.getSoLuong());
                     productMap.putIfAbsent(maSanPham, detail.getChiTietSanPham().getSanPham());
                 });
-        
+
         return productSalesMap.entrySet().stream()
                 .sorted((a, b) -> b.getValue().compareTo(a.getValue()))
                 .limit(limit)

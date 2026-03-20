@@ -362,6 +362,22 @@ public class UserService {
         
         return result;
     }
+
+
+    public java.util.List<VoucherValidationDTO> getApplicableVouchers(BigDecimal tongTien) {
+        java.util.List<Voucher> vouchers = voucherRepository.findByTrangThaiTrue();
+        return vouchers.stream()
+                .map(v -> validateVoucher(v.getCode(), tongTien))
+                .sorted((a, b) -> {
+                    boolean av = a.getValid() != null && a.getValid();
+                    boolean bv = b.getValid() != null && b.getValid();
+                    if (av != bv) return bv ? 1 : -1; 
+                    java.math.BigDecimal ag = a.getSoTienGiam() != null ? a.getSoTienGiam() : java.math.BigDecimal.ZERO;
+                    java.math.BigDecimal bg = b.getSoTienGiam() != null ? b.getSoTienGiam() : java.math.BigDecimal.ZERO;
+                    return bg.compareTo(ag);
+                })
+                .collect(Collectors.toList());
+    }
     
     private String formatCurrency(BigDecimal amount) {
         return String.format("%,dđ", amount.longValue());

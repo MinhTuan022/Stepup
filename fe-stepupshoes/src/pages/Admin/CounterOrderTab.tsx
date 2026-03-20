@@ -1,24 +1,17 @@
-/**
- * CounterOrderTab Component
- * 
- * Tạo và quản lý đơn hàng tại quầy (POS - Point of Sale).
- * - Hỗ trợ cả khách hàng đã đăng ký và khách vãng lai
- * - Chọn sản phẩm và số lượng
- * - Áp dụng voucher giảm giá
- * - CHỈ hỗ trợ thanh toán bằng tiền mặt tại quầy
- * - Hoàn thành đơn hàng ngay sau khi thanh toán
- */
 
-import React, { useState, useEffect } from 'react'
-import { adminService } from '../../services/api'
+
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { adminService, authService } from '../../services/api'
 import { useToast } from '../../context/ToastContext'
 import './CounterOrderTab.css'
+import { BASE_IMAGE_URL } from '../../constants'
 
 interface Product {
   maSanPham: number
   tenSanPham: string
   thuongHieu: string
   giaCoBan: number
+  hinhAnhChinh?: string
 }
 
 interface ProductDetail {
@@ -51,47 +44,199 @@ interface CounterOrder {
   thanhTien: number
   trangThaiDonHang?: string
   trangThaiThanhToan?: string
+  nguoiNhan?: string
+  soDienThoaiNhan?: string
+  maNguoiDungKH?: number
+}
+
+function getInitials(name: string): string {
+  if (!name) return '??'
+  const parts = name.trim().split(' ')
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase()
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
 }
 
 const CounterOrderTab: React.FC = () => {
   const { showToast } = useToast()
-  
-  // State cho thông tin khách hàng
+
+  // State khách hàng
   const [customerType, setCustomerType] = useState<'registered' | 'guest'>('guest')
   const [maNguoiDung, setMaNguoiDung] = useState<number>(0)
   const [nguoiNhan, setNguoiNhan] = useState('')
   const [soDienThoaiNhan, setSoDienThoaiNhan] = useState('')
   const [isSearchingCustomer, setIsSearchingCustomer] = useState(false)
-  
-  // State cho đơn hàng
+
+  // State đơn hàng
   const [currentOrder, setCurrentOrder] = useState<CounterOrder | null>(null)
   const [orderItems, setOrderItems] = useState<OrderItem[]>([])
-  
-  // State cho sản phẩm
+  const [pendingOrders, setPendingOrders] = useState<CounterOrder[]>([])
+
+  // State sản phẩm
   const [products, setProducts] = useState<Product[]>([])
   const [productDetails, setProductDetails] = useState<ProductDetail[]>([])
   const [selectedProduct, setSelectedProduct] = useState<number | null>(null)
   const [selectedDetail, setSelectedDetail] = useState<ProductDetail | null>(null)
   const [selectedQuantity, setSelectedQuantity] = useState(1)
   const [searchTerm, setSearchTerm] = useState('')
-  
-  // State cho voucher
+
+  // State voucher
   const [voucherCode, setVoucherCode] = useState('')
   const [appliedVoucher, setAppliedVoucher] = useState(false)
-  
+
   // State UI
   const [isLoading, setIsLoading] = useState(false)
   const [showProductModal, setShowProductModal] = useState(false)
 
+  const lockIntervalRef = useRef<number | null>(null)
+  const cashierId = authService.getUser()?.maNguoiDung || 0
+
+  const COUNTER_ORDER_STORAGE_KEY = 'counterOrderId'
+  const cancelableCounterStates = useMemo(() => ['cho_xac_nhan', 'chuan_bi_hang'], [])
+
+  // ─── Formatters ────────────────────────────────────────────────
+  const currencyFormatter = useMemo(
+    () => new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }),
+    []
+  )
+  const formatCurrency = useCallback(
+    (amount: number) => currencyFormatter.format(amount),
+    [currencyFormatter]
+  )
+
+  // ─── Khởi tạo ──────────────────────────────────────────────────
   useEffect(() => {
     loadProducts()
+    fetchPendingCounterOrders()
   }, [])
 
+  // Auto-refresh đơn chờ khi không có đơn đang xử lý
   useEffect(() => {
-    if (selectedProduct) {
-      loadProductDetails(selectedProduct)
-    }
+    const id = window.setInterval(() => {
+      if (!currentOrder) fetchPendingCounterOrders()
+    }, 15000)
+    return () => clearInterval(id)
+  }, [currentOrder])
+
+  useEffect(() => {
+    if (selectedProduct) loadProductDetails(selectedProduct)
   }, [selectedProduct])
+
+  // ─── Resume đơn đã lưu khi mount ───────────────────────────────
+  useEffect(() => {
+    const resume = async () => {
+      const saved = localStorage.getItem(COUNTER_ORDER_STORAGE_KEY)
+      if (!saved) return
+      const id = parseInt(saved)
+      if (!id) return
+      try {
+        const order = await adminService.getOrderById(id)
+        if (order && cancelableCounterStates.includes(order.trangThaiDonHang || '')) {
+          setCurrentOrder(order)
+          setOrderItems(mapOrderToItems(order))
+          if (order.nguoiNhan) setNguoiNhan(order.nguoiNhan)
+          if (order.soDienThoaiNhan) setSoDienThoaiNhan(order.soDienThoaiNhan)
+          if (order.maNguoiDungKH) { setMaNguoiDung(order.maNguoiDungKH); setCustomerType('registered') }
+          try {
+            if (cashierId) {
+              await adminService.lockCounterOrder(id, cashierId)
+              startHeartbeat(id)
+            }
+          } catch {
+            showToast('Đơn hiện đang được xử lý bởi ca khác', 'error')
+            localStorage.removeItem(COUNTER_ORDER_STORAGE_KEY)
+          }
+        } else {
+          localStorage.removeItem(COUNTER_ORDER_STORAGE_KEY)
+        }
+      } catch {
+        localStorage.removeItem(COUNTER_ORDER_STORAGE_KEY)
+      }
+    }
+    resume()
+  }, [])
+
+  const tryCancelOnUnload = useCallback(() => {
+    if (!currentOrder) return
+    if (!cancelableCounterStates.includes(currentOrder.trangThaiDonHang || '')) return
+    try {
+      const base = import.meta.env.VITE_API_URL || 'http://localhost:8080/api'
+      fetch(`${base}/v1/admin/orders/${currentOrder.maDonHang}/status?status=huy`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${localStorage.getItem('token')}`,
+        },
+        keepalive: true,
+      }).catch(() => {})
+      if (cashierId) {
+        navigator.sendBeacon(
+          `${base}/v1/admin/orders/${currentOrder.maDonHang}/lock/release`,
+          JSON.stringify({ cashierId })
+        )
+      }
+    } catch {  }
+  }, [currentOrder, cashierId, cancelableCounterStates])
+
+  useEffect(() => {
+    window.addEventListener('beforeunload', tryCancelOnUnload)
+    return () => {
+      window.removeEventListener('beforeunload', tryCancelOnUnload)
+      stopHeartbeat()
+    }
+  }, [tryCancelOnUnload])
+
+  const mapOrderToItems = useCallback((order: any): OrderItem[] => {
+    if (!order?.chiTietDonHangs) return []
+    return order.chiTietDonHangs.map((item: any) => ({
+      maChiTiet: item.maChiTiet,
+      tenSanPham: item.tenSanPham,
+      mauSac: item.mauSac,
+      size: item.size,
+      soLuong: item.soLuong,
+      donGia: item.donGia,
+      thanhTien: item.thanhTien,
+      soLuongTon: item.soLuongTon || 0,
+    }))
+  }, [])
+
+  const startHeartbeat = (orderId: number) => {
+    stopHeartbeat()
+    adminService.touchCounterOrderLock(orderId).catch(() => {})
+    const id = window.setInterval(() => {
+      adminService.touchCounterOrderLock(orderId).catch(() => {})
+    }, 25000)
+    lockIntervalRef.current = id as unknown as number
+  }
+
+  const stopHeartbeat = () => {
+    if (lockIntervalRef.current) {
+      clearInterval(lockIntervalRef.current)
+      lockIntervalRef.current = null
+    }
+  }
+
+  const resetForm = () => {
+    setCurrentOrder(null)
+    setOrderItems([])
+    setNguoiNhan('')
+    setSoDienThoaiNhan('')
+    setMaNguoiDung(0)
+    setVoucherCode('')
+    setAppliedVoucher(false)
+    setCustomerType('guest')
+  }
+
+  const fetchPendingCounterOrders = async () => {
+    try {
+      const data = await adminService.getAllOrders(0, 50, 'cho_xac_nhan')
+      const list = (data.orders || []).filter((o: any) => o.loaiDonHang === 'tai_quay')
+      setPendingOrders(list)
+    } catch (err: any) {
+      console.warn('Không thể tải danh sách đơn chờ:', err)
+    }
+  }
+
+  const fetchPendingCounterOrdersCb = useCallback(fetchPendingCounterOrders, [])
 
   const loadProducts = async () => {
     try {
@@ -113,20 +258,17 @@ const CounterOrderTab: React.FC = () => {
 
   const searchCustomerByPhone = async (phone: string) => {
     if (!phone.trim() || phone.length < 10) return
-    
     setIsSearchingCustomer(true)
     try {
-      // Gọi API để tìm user theo số điện thoại
       const response = await fetch(
         `${import.meta.env.VITE_API_URL || 'http://localhost:8080/api'}/v1/admin/users/search-by-phone?phone=${phone}`,
         {
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${localStorage.getItem('token')}`
-          }
+            Authorization: `Bearer ${localStorage.getItem('token')}`,
+          },
         }
       )
-      
       if (response.ok) {
         const result = await response.json()
         if (result.data) {
@@ -140,18 +282,16 @@ const CounterOrderTab: React.FC = () => {
       } else {
         setMaNguoiDung(0)
       }
-    } catch (error) {
+    } catch {
       setMaNguoiDung(0)
     } finally {
       setIsSearchingCustomer(false)
     }
   }
 
-  // Xử lý thay đổi số điện thoại cho khách đăng ký
+  // ─── Handlers ───────────────────────────────────────────────────
   const handlePhoneChange = (phone: string) => {
     setSoDienThoaiNhan(phone)
-    
-    // Nếu là khách đã đăng ký, tự động tìm kiếm
     if (customerType === 'registered' && phone.length === 10) {
       searchCustomerByPhone(phone)
     } else if (customerType === 'guest') {
@@ -159,44 +299,80 @@ const CounterOrderTab: React.FC = () => {
     }
   }
 
-  // Tạo đơn hàng mới
-  const handleCreateOrder = async () => {
-    if (!nguoiNhan.trim()) {
-      showToast('Vui lòng nhập tên khách hàng', 'error')
-      return
-    }
-    if (!soDienThoaiNhan.trim()) {
-      showToast('Vui lòng nhập số điện thoại', 'error')
-      return
+  const handleCreateOrder = useCallback(async () => {
+    if (!nguoiNhan.trim() && !soDienThoaiNhan.trim()) {
+      showToast('Tạo đơn cho Khách lẻ (không yêu cầu thông tin)', 'info')
     }
 
     setIsLoading(true)
     try {
-      const orderData = {
+      const defaultName = 'Khách lẻ'
+      const defaultPhone = '0000000000'
+      const payloadName = customerType === 'registered' ? (nguoiNhan?.trim() || '') : (nguoiNhan?.trim() || defaultName)
+      const payloadPhone = customerType === 'registered' ? (soDienThoaiNhan?.trim() || '') : (soDienThoaiNhan?.trim() || defaultPhone)
+
+      const newOrder = await adminService.createCounterOrder({
         maNguoiDung: customerType === 'registered' ? maNguoiDung : 0,
-        nguoiNhan: nguoiNhan,
-        soDienThoaiNhan: soDienThoaiNhan,
-        diaChiGiaoHang: 'Tại quầy'
-      }
-      
-      const newOrder = await adminService.createCounterOrder(orderData)
+        nguoiNhan: payloadName,
+        soDienThoaiNhan: payloadPhone,
+        diaChiGiaoHang: 'Tại quầy',
+      })
       setCurrentOrder(newOrder)
       setOrderItems([])
       setAppliedVoucher(false)
+      if (!nguoiNhan?.trim()) setNguoiNhan(customerType === 'registered' ? '' : defaultName)
+      if (!soDienThoaiNhan?.trim()) setSoDienThoaiNhan(customerType === 'registered' ? '' : defaultPhone)
+      localStorage.setItem(COUNTER_ORDER_STORAGE_KEY, String(newOrder.maDonHang))
+      if (newOrder.maDonHang && cashierId) {
+        await adminService.lockCounterOrder(newOrder.maDonHang, cashierId).catch(() => {})
+        startHeartbeat(newOrder.maDonHang)
+      }
       showToast('Tạo đơn hàng thành công', 'success')
+      fetchPendingCounterOrdersCb()
     } catch (error: any) {
       showToast(error.message || 'Lỗi khi tạo đơn hàng', 'error')
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [nguoiNhan, soDienThoaiNhan, customerType, maNguoiDung, cashierId, fetchPendingCounterOrdersCb, showToast])
 
-  // Mở modal chọn sản phẩm
-  const handleOpenProductModal = () => {
-    if (!currentOrder) {
-      showToast('Vui lòng tạo đơn hàng trước', 'error')
-      return
+  const handleResumeOrder = useCallback(async (orderId: number) => {
+    try {
+      if (cashierId) await adminService.lockCounterOrder(orderId, cashierId)
+      const order = await adminService.getOrderById(orderId)
+      setCurrentOrder(order)
+      setOrderItems(mapOrderToItems(order))
+      // Điền lại thông tin khách từ đơn
+      if (order.nguoiNhan) setNguoiNhan(order.nguoiNhan)
+      if (order.soDienThoaiNhan) setSoDienThoaiNhan(order.soDienThoaiNhan)
+      if (order.maNguoiDungKH) { setMaNguoiDung(order.maNguoiDungKH); setCustomerType('registered') }
+      localStorage.setItem(COUNTER_ORDER_STORAGE_KEY, String(orderId))
+      startHeartbeat(orderId)
+      fetchPendingCounterOrdersCb()
+    } catch (err: any) {
+      showToast(err?.message || 'Không thể mở đơn chờ', 'error')
     }
+  }, [cashierId, mapOrderToItems, fetchPendingCounterOrdersCb, showToast])
+
+  const handleStartNewOrder = useCallback(async () => {
+    if (!currentOrder) return
+    if (!window.confirm('Lưu đơn hiện tại vào danh sách chờ và tạo đơn mới?')) return
+
+    setIsLoading(true)
+    try {
+      if (cashierId) await adminService.releaseCounterOrderLock(currentOrder.maDonHang, cashierId).catch(() => {})
+      localStorage.removeItem(COUNTER_ORDER_STORAGE_KEY)
+      stopHeartbeat()
+      resetForm()
+      showToast('Sẵn sàng tạo đơn mới', 'success')
+      fetchPendingCounterOrdersCb()
+    } finally {
+      setIsLoading(false)
+    }
+  }, [currentOrder, cashierId, fetchPendingCounterOrdersCb, showToast])
+
+  const handleOpenProductModal = () => {
+    if (!currentOrder) { showToast('Vui lòng tạo đơn hàng trước', 'error'); return }
     setShowProductModal(true)
     setSelectedProduct(null)
     setSelectedDetail(null)
@@ -204,18 +380,10 @@ const CounterOrderTab: React.FC = () => {
     setSearchTerm('')
   }
 
-  // Thêm sản phẩm vào đơn
-  const handleAddItem = async () => {
-    if (!currentOrder || !selectedDetail) {
-      showToast('Vui lòng chọn sản phẩm', 'error')
-      return
-    }
-
-    if (selectedQuantity <= 0) {
-      showToast('Số lượng phải lớn hơn 0', 'error')
-      return
-    }
-
+  const handleAddItem = useCallback(async () => {
+    if (!currentOrder || !selectedDetail) { showToast('Vui lòng chọn sản phẩm', 'error'); return }
+    if (selectedQuantity <= 0) { showToast('Số lượng phải lớn hơn 0', 'error'); return }
+    // check against available stock
     if (selectedQuantity > selectedDetail.soLuongTon) {
       showToast(`Chỉ còn ${selectedDetail.soLuongTon} sản phẩm trong kho`, 'error')
       return
@@ -223,110 +391,79 @@ const CounterOrderTab: React.FC = () => {
 
     setIsLoading(true)
     try {
-      const updatedOrder = await adminService.addItemToOrder(currentOrder.maDonHang, {
-        maChiTiet: selectedDetail.maChiTiet,
-        soLuong: selectedQuantity
-      })
-      
-      setCurrentOrder(updatedOrder)
-      
-      // Cập nhật danh sách items từ API response
-      if (updatedOrder.chiTietDonHangs && updatedOrder.chiTietDonHangs.length > 0) {
-        const items: OrderItem[] = updatedOrder.chiTietDonHangs.map((item: any) => ({
-          maChiTiet: item.maChiTiet,
-          tenSanPham: item.tenSanPham,
-          mauSac: item.mauSac,
-          size: item.size,
-          soLuong: item.soLuong,
-          donGia: item.donGia,
-          thanhTien: item.thanhTien,
-          soLuongTon: selectedDetail.soLuongTon // Giữ thông tin tồn kho hiện tại
-        }))
-        setOrderItems(items)
+      const existing = orderItems.find((it) => it.maChiTiet === selectedDetail.maChiTiet)
+      if (existing) {
+        const newQty = existing.soLuong + selectedQuantity
+        if (newQty > selectedDetail.soLuongTon) {
+          showToast(`Tổng số lượng vượt quá tồn kho (${selectedDetail.soLuongTon})`, 'error')
+          return
+        }
+        await adminService.removeItemFromOrder(currentOrder.maDonHang, existing.maChiTiet)
+        const updatedOrder = await adminService.addItemToOrder(currentOrder.maDonHang, {
+          maChiTiet: selectedDetail.maChiTiet,
+          soLuong: newQty,
+        })
+        setCurrentOrder(updatedOrder)
+        setOrderItems(mapOrderToItems(updatedOrder))
+        if (updatedOrder?.maDonHang) localStorage.setItem(COUNTER_ORDER_STORAGE_KEY, String(updatedOrder.maDonHang))
+        setShowProductModal(false)
+        showToast('Cập nhật số lượng sản phẩm thành công', 'success')
+      } else {
+        const updatedOrder = await adminService.addItemToOrder(currentOrder.maDonHang, {
+          maChiTiet: selectedDetail.maChiTiet,
+          soLuong: selectedQuantity,
+        })
+        setCurrentOrder(updatedOrder)
+        setOrderItems(mapOrderToItems(updatedOrder))
+        if (updatedOrder?.maDonHang) localStorage.setItem(COUNTER_ORDER_STORAGE_KEY, String(updatedOrder.maDonHang))
+        setShowProductModal(false)
+        showToast('Thêm sản phẩm thành công', 'success')
       }
-      
-      setShowProductModal(false)
-      showToast('Thêm sản phẩm thành công', 'success')
+
+      try {
+        if (selectedProduct) {
+          const details = await adminService.getProductDetailsByProductId(selectedProduct)
+          setProductDetails(details || [])
+          const refreshed = (details || []).find((d: any) => d.maChiTiet === selectedDetail?.maChiTiet) || null
+          setSelectedDetail(refreshed)
+        }
+      } catch {
+      }
     } catch (error: any) {
       showToast(error.message || 'Lỗi khi thêm sản phẩm', 'error')
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [currentOrder, selectedDetail, selectedQuantity, mapOrderToItems, showToast])
 
-  // Xóa sản phẩm khỏi đơn
-  const handleRemoveItem = async (maChiTiet: number) => {
+  const handleRemoveItem = useCallback(async (maChiTiet: number) => {
     if (!currentOrder) return
-
     if (!window.confirm('Bạn có chắc muốn xóa sản phẩm này?')) return
 
     setIsLoading(true)
     try {
       const updatedOrder = await adminService.removeItemFromOrder(currentOrder.maDonHang, maChiTiet)
       setCurrentOrder(updatedOrder)
-      
-      // Cập nhật danh sách items từ API response
-      if (updatedOrder.chiTietDonHangs && updatedOrder.chiTietDonHangs.length > 0) {
-        const items: OrderItem[] = updatedOrder.chiTietDonHangs.map((item: any) => ({
-          maChiTiet: item.maChiTiet,
-          tenSanPham: item.tenSanPham,
-          mauSac: item.mauSac,
-          size: item.size,
-          soLuong: item.soLuong,
-          donGia: item.donGia,
-          thanhTien: item.thanhTien,
-          soLuongTon: 0 // Không cần thiết cho hiển thị
-        }))
-        setOrderItems(items)
-      } else {
-        setOrderItems([])
-      }
-      
+      setOrderItems(mapOrderToItems(updatedOrder))
       showToast('Xóa sản phẩm thành công', 'success')
     } catch (error: any) {
       showToast(error.message || 'Lỗi khi xóa sản phẩm', 'error')
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [currentOrder, mapOrderToItems, showToast])
 
-  // Áp dụng voucher
-  const handleApplyVoucher = async () => {
-    if (!currentOrder) {
-      showToast('Chưa có đơn hàng', 'error')
-      return
-    }
-
-    if (!voucherCode.trim()) {
-      showToast('Vui lòng nhập mã voucher', 'error')
-      return
-    }
-
-    if (orderItems.length === 0) {
-      showToast('Vui lòng thêm sản phẩm vào đơn hàng', 'error')
-      return
-    }
+  const handleApplyVoucher = useCallback(async () => {
+    if (!currentOrder) { showToast('Chưa có đơn hàng', 'error'); return }
+    if (!voucherCode.trim()) { showToast('Vui lòng nhập mã voucher', 'error'); return }
+    if (orderItems.length === 0) { showToast('Vui lòng thêm sản phẩm vào đơn hàng', 'error'); return }
 
     setIsLoading(true)
     try {
       const updatedOrder = await adminService.applyVoucherToOrder(currentOrder.maDonHang, voucherCode)
       setCurrentOrder(updatedOrder)
-      
-      // Cập nhật danh sách items từ API response nếu có
-      if (updatedOrder.chiTietDonHangs && updatedOrder.chiTietDonHangs.length > 0) {
-        const items: OrderItem[] = updatedOrder.chiTietDonHangs.map((item: any) => ({
-          maChiTiet: item.maChiTiet,
-          tenSanPham: item.tenSanPham,
-          mauSac: item.mauSac,
-          size: item.size,
-          soLuong: item.soLuong,
-          donGia: item.donGia,
-          thanhTien: item.thanhTien,
-          soLuongTon: 0
-        }))
-        setOrderItems(items)
-      }
-      
+      if (updatedOrder?.maDonHang) localStorage.setItem(COUNTER_ORDER_STORAGE_KEY, String(updatedOrder.maDonHang))
+      if (updatedOrder.chiTietDonHangs?.length > 0) setOrderItems(mapOrderToItems(updatedOrder))
       setAppliedVoucher(true)
       showToast('Áp dụng voucher thành công', 'success')
     } catch (error: any) {
@@ -334,458 +471,531 @@ const CounterOrderTab: React.FC = () => {
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [currentOrder, voucherCode, orderItems.length, mapOrderToItems, showToast])
 
-  // Hoàn thành đơn hàng (thanh toán tiền mặt)
-  const handleFinalizeOrder = async () => {
-    if (!currentOrder) {
-      showToast('Chưa có đơn hàng', 'error')
-      return
-    }
-
-    if (orderItems.length === 0) {
-      showToast('Đơn hàng chưa có sản phẩm', 'error')
-      return
-    }
-
-    if (!window.confirm(`Xác nhận thanh toán ${formatCurrency(currentOrder.thanhTien)} bằng tiền mặt?`)) {
-      return
-    }
+  const handleFinalizeOrder = useCallback(async () => {
+    if (!currentOrder) { showToast('Chưa có đơn hàng', 'error'); return }
+    if (orderItems.length === 0) { showToast('Đơn hàng chưa có sản phẩm', 'error'); return }
+    if (!window.confirm(`Xác nhận thanh toán ${formatCurrency(currentOrder.thanhTien)} bằng tiền mặt?`)) return
 
     setIsLoading(true)
     try {
-      // Finalize on backend (may set payment/status). Still enforce both updates to be safe.
       await adminService.finalizeCounterOrder(currentOrder.maDonHang, 'tien_mat')
-
-      // Ensure order status = hoan_thanh
-      try {
-        await adminService.updateOrderStatus(currentOrder.maDonHang, 'hoan_thanh')
-      } catch (err) {
-        console.error('Lỗi khi cập nhật trạng thái đơn sau finalize:', err)
-      }
-
-      // Ensure payment status = da_thanh_toan
-      try {
-        await adminService.updateOrder(currentOrder.maDonHang, { trangThaiThanhToan: 'da_thanh_toan' })
-      } catch (err) {
-        console.error('Lỗi khi cập nhật trạng thái thanh toán sau finalize:', err)
-      }
+      await adminService.updateOrderStatus(currentOrder.maDonHang, 'hoan_thanh').catch(() => {})
+      await adminService.updateOrder(currentOrder.maDonHang, { trangThaiThanhToan: 'da_thanh_toan' }).catch(() => {})
 
       showToast('Hoàn thành và thanh toán đơn hàng thành công', 'success')
-
-      // Reset form
-      setCurrentOrder(null)
-      setOrderItems([])
-      setNguoiNhan('')
-      setSoDienThoaiNhan('')
-      setMaNguoiDung(0)
-      setVoucherCode('')
-      setAppliedVoucher(false)
+      localStorage.removeItem(COUNTER_ORDER_STORAGE_KEY)
+      if (cashierId) await adminService.releaseCounterOrderLock(currentOrder.maDonHang, cashierId).catch(() => {})
+      stopHeartbeat()
+      resetForm()
+      fetchPendingCounterOrdersCb()
     } catch (error: any) {
       showToast(error.message || 'Lỗi khi hoàn thành đơn hàng', 'error')
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [currentOrder, orderItems.length, cashierId, formatCurrency, fetchPendingCounterOrdersCb, showToast])
 
-  // Hủy đơn hàng
-  const handleCancelOrder = async () => {
+  const handleCancelOrder = useCallback(async () => {
     if (!currentOrder) return
-
-    const cancelable = ['cho_xac_nhan', 'chuan_bi_hang']
-    if (!cancelable.includes(currentOrder.trangThaiDonHang || '')) {
+    if (!cancelableCounterStates.includes(currentOrder.trangThaiDonHang || '')) {
       showToast('Không thể hủy đơn hàng ở trạng thái hiện tại', 'error')
       return
     }
-
     if (!window.confirm('Bạn có chắc muốn hủy đơn hàng này?')) return
 
     setIsLoading(true)
     try {
       await adminService.updateOrderStatus(currentOrder.maDonHang, 'huy')
       showToast('Đã hủy đơn hàng', 'info')
-      // reload/clear local state
-      setCurrentOrder(null)
-      setOrderItems([])
-      setNguoiNhan('')
-      setSoDienThoaiNhan('')
-      setMaNguoiDung(0)
-      setVoucherCode('')
-      setAppliedVoucher(false)
-      setCustomerType('guest')
+      localStorage.removeItem(COUNTER_ORDER_STORAGE_KEY)
+      if (cashierId) await adminService.releaseCounterOrderLock(currentOrder.maDonHang, cashierId).catch(() => {})
+      stopHeartbeat()
+      resetForm()
+      fetchPendingCounterOrdersCb()
     } catch (error: any) {
       showToast(error.message || 'Lỗi khi hủy đơn', 'error')
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [currentOrder, cashierId, cancelableCounterStates, fetchPendingCounterOrdersCb, showToast])
 
-  // Các trạng thái cho phép hủy tại quầy
-  const cancelableCounterStates = ['cho_xac_nhan', 'chuan_bi_hang']
-
-  React.useEffect(() => {
-    let isUnmounting = false
-
-    const tryCancelOnUnload = () => {
-      if (!currentOrder) return
-      if (!cancelableCounterStates.includes(currentOrder.trangThaiDonHang || '')) return
-      adminService.updateOrderStatus(currentOrder.maDonHang, 'huy').catch((err) => {
-        console.error('Không thể hủy đơn trên unload:', err)
-      })
-    }
-
-    const beforeUnloadHandler = () => {
-      tryCancelOnUnload()
-    }
-
-    window.addEventListener('beforeunload', beforeUnloadHandler)
-
-    return () => {
-      isUnmounting = true
-      tryCancelOnUnload()
-      window.removeEventListener('beforeunload', beforeUnloadHandler)
-    }
-  }, [currentOrder])
-
-  // Format tiền tệ
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('vi-VN', {
-      style: 'currency',
-      currency: 'VND'
-    }).format(amount)
-  }
-
-  // Filter products theo search term
-  const filteredProducts = products.filter(p => 
-    p.tenSanPham.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    p.thuongHieu.toLowerCase().includes(searchTerm.toLowerCase())
+  // ─── Derived ────────────────────────────────────────────────────
+  const filteredProducts = useMemo(
+    () => products.filter(
+      (p) =>
+        p.tenSanPham.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        p.thuongHieu.toLowerCase().includes(searchTerm.toLowerCase())
+    ),
+    [products, searchTerm]
   )
 
+  const canCancel =
+    !!currentOrder && cancelableCounterStates.includes(currentOrder.trangThaiDonHang || '')
+
+  // ─── Render ─────────────────────────────────────────────────────
   return (
-    <div className="counter-order-tab">
-      <h2>Bán Hàng Tại Quầy</h2>
-
-      {/* Thông tin khách hàng */}
-      <div className="customer-section">
-        <h3>Thông Tin Khách Hàng</h3>
-        
-        <div className="customer-type-selector">
-          <label>
-            <input
-              type="radio"
-              name="customerType"
-              value="guest"
-              checked={customerType === 'guest'}
-              onChange={(e) => setCustomerType(e.target.value as 'guest')}
-              disabled={!!currentOrder}
-            />
-            Khách vãng lai
-          </label>
-          <label>
-            <input
-              type="radio"
-              name="customerType"
-              value="registered"
-              checked={customerType === 'registered'}
-              onChange={(e) => setCustomerType(e.target.value as 'registered')}
-              disabled={!!currentOrder}
-            />
-            Khách hàng đã đăng ký
-          </label>
-        </div>
-
-        {customerType === 'registered' && maNguoiDung > 0 && (
-          <div className="form-group">
-            <label>Mã khách hàng:</label>
-            <input
-              type="number"
-              value={maNguoiDung}
-              disabled
-              style={{ background: '#e8f5e9', color: '#2e7d32', fontWeight: 600 }}
-            />
-          </div>
-        )}
-
-        <div className="form-group">
-          <label>Số điện thoại: *</label>
-          <input
-            type="tel"
-            value={soDienThoaiNhan}
-            onChange={(e) => handlePhoneChange(e.target.value)}
-            disabled={!!currentOrder}
-            placeholder="Nhập số điện thoại"
-            required
-          />
-          {isSearchingCustomer && <small style={{ color: '#2196f3' }}>Đang tìm kiếm...</small>}
-        </div>
-
-        <div className="form-group">
-          <label>Tên khách hàng: *</label>
-          <input
-            type="text"
-            value={nguoiNhan}
-            onChange={(e) => setNguoiNhan(e.target.value)}
-            disabled={!!currentOrder || (customerType === 'registered' && maNguoiDung > 0)}
-            placeholder={customerType === 'registered' ? 'Tự động điền sau khi nhập SĐT' : 'Nhập tên khách hàng'}
-            required
-          />
-        </div>
-
-        {!currentOrder && (
-          <button 
-            className="btn btn-primary"
-            onClick={handleCreateOrder}
+    <div className="cot-wrapper">
+      {/* ── Header ── */}
+      <div className="cot-page-header">
+        <h2 className="cot-page-title">Bán hàng tại quầy</h2>
+        {currentOrder && (
+          <button
+            className="cot-btn cot-btn-ghost"
+            onClick={handleStartNewOrder}
             disabled={isLoading}
           >
-            Tạo Đơn Hàng
+            Lưu &amp; tạo đơn mới
           </button>
         )}
       </div>
 
-      {/* Danh sách sản phẩm trong đơn */}
-      {currentOrder && (
-        <>
-          <div className="order-section">
-            <div className="order-header">
-              <h3>Đơn Hàng #{currentOrder.maDonHang}</h3>
-              <button 
-                className="btn btn-secondary"
-                onClick={handleOpenProductModal}
-                disabled={isLoading}
-              >
-                + Thêm Sản Phẩm
-              </button>
-            </div>
+      <div className="cot-layout">
+        <div className="cot-main">
+          {!currentOrder && (
+            <div className="cot-card">
+              <p className="cot-section-label">Thông tin khách hàng</p>
 
-            {orderItems.length === 0 ? (
-              <p className="empty-order">Chưa có sản phẩm trong đơn hàng</p>
-            ) : (
-              <div className="order-items">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Sản phẩm</th>
-                      <th>Màu sắc</th>
-                      <th>Size</th>
-                      <th>Đơn giá</th>
-                      <th>Số lượng</th>
-                      <th>Thành tiền</th>
-                      <th>Thao tác</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {orderItems.map((item) => (
-                      <tr key={item.maChiTiet}>
-                        <td>{item.tenSanPham}</td>
-                        <td>{item.mauSac}</td>
-                        <td>{item.size}</td>
-                        <td>{formatCurrency(item.donGia)}</td>
-                        <td>{item.soLuong}</td>
-                        <td className="price">{formatCurrency(item.thanhTien)}</td>
-                        <td>
-                          <button
-                            className="btn btn-danger btn-sm"
-                            onClick={() => handleRemoveItem(item.maChiTiet)}
-                            disabled={isLoading}
-                          >
-                            Xóa
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-
-          {/* Voucher */}
-          <div className="voucher-section">
-            <h3>Mã Giảm Giá</h3>
-            <div className="voucher-input">
-              <input
-                type="text"
-                value={voucherCode}
-                onChange={(e) => setVoucherCode(e.target.value)}
-                placeholder="Nhập mã voucher"
-                disabled={appliedVoucher || isLoading}
-              />
-              <button
-                className="btn btn-secondary"
-                onClick={handleApplyVoucher}
-                disabled={appliedVoucher || isLoading || orderItems.length === 0}
-              >
-                {appliedVoucher ? 'Đã áp dụng' : 'Áp dụng'}
-              </button>
-            </div>
-          </div>
-
-          {/* Tổng tiền */}
-          <div className="order-summary">
-            <div className="summary-row">
-              <span>Tổng tiền hàng:</span>
-              <span className="price">{formatCurrency(currentOrder.tongTien)}</span>
-            </div>
-            {currentOrder.giamGia > 0 && (
-              <div className="summary-row discount">
-                <span>Giảm giá:</span>
-                <span className="price">-{formatCurrency(currentOrder.giamGia)}</span>
-              </div>
-            )}
-            <div className="summary-row total">
-              <span>Tổng thanh toán:</span>
-              <span className="price">{formatCurrency(currentOrder.thanhTien)}</span>
-            </div>
-          </div>
-
-          {/* Nút thao tác */}
-          <div className="order-actions">
-            <button
-              className="btn btn-danger"
-              onClick={handleCancelOrder}
-              disabled={isLoading || !(currentOrder && ['cho_xac_nhan', 'chuan_bi_hang'].includes(currentOrder.trangThaiDonHang || ''))}
-            >
-              Hủy Đơn
-            </button>
-            <button
-              className="btn btn-success btn-lg"
-              onClick={handleFinalizeOrder}
-              disabled={isLoading || orderItems.length === 0}
-            >
-              Thanh Toán Tiền Mặt
-            </button>
-          </div>
-        </>
-      )}
-
-      {/* Modal chọn sản phẩm */}
-      {showProductModal && (
-        <div className="modal-overlay" onClick={() => setShowProductModal(false)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h3>Chọn Sản Phẩm</h3>
-              <button className="close-btn" onClick={() => setShowProductModal(false)}>×</button>
-            </div>
-            
-            <div className="modal-body">
-              {/* Tìm kiếm sản phẩm */}
-              <div className="search-box">
-                <input
-                  type="text"
-                  placeholder="Tìm kiếm sản phẩm..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                />
+              <div className="cot-radio-group">
+                <label className={`cot-radio-option ${customerType === 'guest' ? 'active' : ''}`}>
+                  <input
+                    type="radio"
+                    name="customerType"
+                    value="guest"
+                    checked={customerType === 'guest'}
+                    onChange={() => setCustomerType('guest')}
+                  />
+                  Khách vãng lai
+                </label>
+                <label className={`cot-radio-option ${customerType === 'registered' ? 'active' : ''}`}>
+                  <input
+                    type="radio"
+                    name="customerType"
+                    value="registered"
+                    checked={customerType === 'registered'}
+                    onChange={() => setCustomerType('registered')}
+                  />
+                  Khách đã đăng ký
+                </label>
               </div>
 
-              {/* Danh sách sản phẩm */}
-              <div className="product-list">
-                <h4>Chọn sản phẩm:</h4>
-                <div className="products-counter-grid">
-                  {filteredProducts.map((product) => (
-                    <div
-                      key={product.maSanPham}
-                      className={`product-card ${selectedProduct === product.maSanPham ? 'selected' : ''}`}
-                      onClick={() => setSelectedProduct(product.maSanPham)}
-                    >
-                      <h5>{product.tenSanPham}</h5>
-                      <p>{product.thuongHieu}</p>
-                      <p className="price">{formatCurrency(product.giaCoBan)}</p>
-                    </div>
-                  ))}
+              <div className="cot-form-row">
+                <div className="cot-form-group">
+                  <label>Số điện thoại *</label>
+                  <div className="cot-input-wrap">
+                    <input
+                      type="tel"
+                      value={soDienThoaiNhan}
+                      onChange={(e) => handlePhoneChange(e.target.value)}
+                      placeholder="Nhập số điện thoại"
+                    />
+                    {isSearchingCustomer && <span className="cot-input-hint searching">Đang tìm...</span>}
+                    {customerType === 'registered' && maNguoiDung > 0 && !isSearchingCustomer && (
+                      <span className="cot-input-hint found">Đã tìm thấy</span>
+                    )}
+                  </div>
+                </div>
+                <div className="cot-form-group">
+                  <label>Tên khách hàng *</label>
+                  <input
+                    type="text"
+                    value={nguoiNhan}
+                    onChange={(e) => setNguoiNhan(e.target.value)}
+                    disabled={customerType === 'registered' && maNguoiDung > 0}
+                    placeholder={
+                      customerType === 'registered'
+                        ? 'Tự động điền sau khi nhập SĐT'
+                        : 'Nhập tên khách hàng'
+                    }
+                  />
                 </div>
               </div>
 
-              {/* Chi tiết sản phẩm (màu sắc, size) */}
+              <button
+                className="cot-btn cot-btn-primary cot-btn-full"
+                onClick={handleCreateOrder}
+                disabled={isLoading}
+              >
+                {isLoading ? 'Đang tạo...' : 'Tạo đơn hàng'}
+              </button>
+            </div>
+          )}
+
+          {/* ── Đơn đang xử lý ── */}
+          {currentOrder && (
+            <div className="cot-card">
+              <div className="cot-order-header">
+                <div className="cot-order-title">
+                  <span className="cot-active-dot" />
+                  <span>Đơn đang xử lý</span>
+                  <span className="cot-order-id">#{currentOrder.maDonHang}</span>
+                </div>
+                <button
+                  className="cot-btn cot-btn-outline-sm"
+                  onClick={handleOpenProductModal}
+                  disabled={isLoading}
+                >
+                  + Thêm sản phẩm
+                </button>
+              </div>
+
+              {/* Thông tin khách (compact bar) */}
+              <div className="cot-customer-bar">
+                <div className="cot-avatar">{getInitials(nguoiNhan)}</div>
+                <div className="cot-customer-info">
+                  <span className="cot-customer-name">{nguoiNhan || 'Khách lẻ'}</span>
+                  <span className="cot-customer-meta">
+                    {soDienThoaiNhan || '—'}
+                    {customerType === 'registered' && maNguoiDung > 0 && (
+                      <> · <span className="cot-badge-registered">Đã đăng ký</span></>
+                    )}
+                  </span>
+                </div>
+              </div>
+
+              {/* Bảng sản phẩm */}
+              {orderItems.length === 0 ? (
+                <div className="cot-empty-items">
+                  <div className="cot-empty-icon">🛒</div>
+                  <p>Chưa có sản phẩm — nhấn "Thêm sản phẩm" để bắt đầu</p>
+                </div>
+              ) : (
+                <div className="cot-items-table-wrap">
+                  <table className="cot-items-table">
+                    <thead>
+                      <tr>
+                        <th>Sản phẩm</th>
+                        <th>Đơn giá</th>
+                        <th>Số lượng</th>
+                        <th style={{ textAlign: 'right' }}>Thành tiền</th>
+                        <th />
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {orderItems.map((item) => (
+                        <tr key={item.maChiTiet}>
+                          <td>
+                            <div className="cot-item-name">{item.tenSanPham}</div>
+                            <div className="cot-item-variant">
+                              {item.mauSac} · Size {item.size}
+                            </div>
+                          </td>
+                          <td className="cot-price">{formatCurrency(item.donGia)}</td>
+                          <td>
+                            <span className="cot-qty-badge">{item.soLuong}</span>
+                          </td>
+                          <td style={{ textAlign: 'right' }} className="cot-price">
+                            {formatCurrency(item.thanhTien)}
+                          </td>
+                          <td>
+                            <button
+                              className="cot-remove-btn"
+                              onClick={() => handleRemoveItem(item.maChiTiet)}
+                              disabled={isLoading}
+                              title="Xóa sản phẩm"
+                            >
+                              ×
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div className="cot-sidebar">
+          {/* ── Thanh toán (chỉ hiện khi có đơn) ── */}
+          {currentOrder && (
+            <div className="cot-card">
+              <p className="cot-section-label">Thanh toán</p>
+
+              <div className="cot-voucher-row">
+                <input
+                  type="text"
+                  value={voucherCode}
+                  onChange={(e) => setVoucherCode(e.target.value)}
+                  placeholder="Mã giảm giá..."
+                  disabled={appliedVoucher || isLoading}
+                  onKeyDown={(e) => e.key === 'Enter' && handleApplyVoucher()}
+                />
+                <button
+                  className="cot-btn cot-btn-outline-sm"
+                  onClick={handleApplyVoucher}
+                  disabled={appliedVoucher || isLoading || orderItems.length === 0}
+                >
+                  {appliedVoucher ? '✓ Đã áp dụng' : 'Áp dụng'}
+                </button>
+              </div>
+
+              {/* Tổng tiền */}
+              <div className="cot-summary">
+                <div className="cot-summary-row">
+                  <span>Tổng hàng</span>
+                  <span>{formatCurrency(currentOrder.tongTien)}</span>
+                </div>
+                {currentOrder.giamGia > 0 && (
+                  <div className="cot-summary-row cot-discount">
+                    <span>Giảm giá</span>
+                    <span>−{formatCurrency(currentOrder.giamGia)}</span>
+                  </div>
+                )}
+                {currentOrder.phiVanChuyen > 0 ? (
+                  <div className="cot-summary-row">
+                    <span>Phí vận chuyển</span>
+                    <span>{formatCurrency(currentOrder.phiVanChuyen)}</span>
+                  </div>
+                ) : (
+                  <div className="cot-summary-row">
+                    <span>Phí vận chuyển</span>
+                    <span className="cot-free">Miễn phí</span>
+                  </div>
+                )}
+                <div className="cot-summary-row cot-total">
+                  <span>Tổng thanh toán</span>
+                  <span>{formatCurrency(currentOrder.thanhTien)}</span>
+                </div>
+              </div>
+
+              {/* Nút hành động */}
+              <div className="cot-action-row">
+                <button
+                  className="cot-btn cot-btn-cancel"
+                  onClick={handleCancelOrder}
+                  disabled={isLoading || !canCancel}
+                  title={!canCancel ? 'Không thể hủy đơn ở trạng thái hiện tại' : ''}
+                >
+                  Hủy đơn
+                </button>
+                <button
+                  className="cot-btn cot-btn-pay"
+                  onClick={handleFinalizeOrder}
+                  disabled={isLoading || orderItems.length === 0}
+                >
+                  {isLoading ? 'Đang xử lý...' : 'Thanh toán tiền mặt'}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* ── Danh sách đơn chờ ── */}
+          <div className="cot-card">
+            <div className="cot-pending-header">
+              <p className="cot-section-label" style={{ margin: 0 }}>Đơn chờ tại quầy</p>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                {pendingOrders.length > 0 && (
+                  <span className="cot-count-badge">{pendingOrders.length}</span>
+                )}
+                <button
+                  className="cot-btn cot-btn-ghost-sm"
+                  onClick={fetchPendingCounterOrders}
+                  title="Làm mới"
+                >
+                  ↺
+                </button>
+              </div>
+            </div>
+
+            {pendingOrders.length === 0 ? (
+              <div className="cot-empty-pending">
+                <p>Không có đơn chờ</p>
+              </div>
+            ) : (
+              <div className="cot-pending-list">
+                {pendingOrders.map((o: any) => {
+                  const isCurrentlyOpen = currentOrder?.maDonHang === o.maDonHang
+                  return (
+                    <div
+                      key={o.maDonHang}
+                      className={`cot-pending-item ${isCurrentlyOpen ? 'is-open' : ''}`}
+                      onClick={() => !isCurrentlyOpen && handleResumeOrder(o.maDonHang)}
+                      title={isCurrentlyOpen ? 'Đơn đang mở' : 'Nhấn để mở đơn này'}
+                    >
+                      <div className="cot-pending-avatar">
+                        {getInitials(o.nguoiNhan || '')}
+                      </div>
+                      <div className="cot-pending-info">
+                        <div className="cot-pending-name">
+                          {o.nguoiNhan || 'Khách lẻ'}
+                          {isCurrentlyOpen && <span className="cot-open-badge">Đang mở</span>}
+                        </div>
+                        <div className="cot-pending-meta">
+                          #{o.maDonHang} · {o.soDienThoaiNhan || '—'}
+                        </div>
+                      </div>
+                      <div className="cot-pending-right">
+                        <div className="cot-pending-price">
+                          {formatCurrency(o.thanhTien || 0)}
+                        </div>
+                        {!isCurrentlyOpen && (
+                          <div className="cot-pending-open-hint">Mở →</div>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+
+          {!currentOrder && (
+            <div className="cot-new-order-hint">
+              <span>Nhập thông tin khách bên trái để tạo đơn mới</span>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ══════════════ MODAL CHỌN SẢN PHẨM ══════════════ */}
+      {showProductModal && (
+        <div className="cot-modal-overlay" onClick={() => setShowProductModal(false)}>
+          <div className="cot-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="cot-modal-header">
+              <h3>Chọn sản phẩm</h3>
+              <button className="cot-modal-close" onClick={() => setShowProductModal(false)}>×</button>
+            </div>
+
+            <div className="cot-modal-body">
+              <input
+                className="cot-search-input"
+                type="text"
+                placeholder="Tìm theo tên sản phẩm hoặc thương hiệu..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                autoFocus
+              />
+
+              <p className="cot-modal-section-title">Chọn sản phẩm</p>
+              <div className="cot-product-grid">
+                {filteredProducts.map((product) => (
+                  <div
+                    key={product.maSanPham}
+                    className={`cot-product-card ${selectedProduct === product.maSanPham ? 'selected' : ''}`}
+                    onClick={() => {
+                      setSelectedProduct(product.maSanPham)
+                      setSelectedDetail(null)
+                      setSelectedQuantity(1)
+                    }}
+                  >
+                    {/* <div className="cot-product-thumb">
+                      {product.hinhAnhChinh ? (
+                        <img
+                          src={`${BASE_IMAGE_URL}${product.hinhAnhChinh}`}
+                          alt={product.tenSanPham}
+                          onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }}
+                        />
+                      ) : null}
+                    </div> */}
+                    <div className="cot-product-name">{product.tenSanPham}</div>
+                    <div className="cot-product-brand">{product.thuongHieu}</div>
+                    <div className="cot-product-price">{formatCurrency(product.giaCoBan)}</div>
+                  </div>
+                ))}
+                {filteredProducts.length === 0 && (
+                  <p className="cot-no-results">Không tìm thấy sản phẩm phù hợp</p>
+                )}
+              </div>
+
               {selectedProduct && productDetails.length > 0 && (
-                <div className="product-details">
-                  <h4>Chọn màu sắc và size:</h4>
-                  <div className="details-grid">
+                <>
+                  <p className="cot-modal-section-title">Chọn màu sắc &amp; size</p>
+                  <div className="cot-variant-grid">
                     {productDetails.map((detail) => (
                       <div
                         key={detail.maChiTiet}
-                        className={`detail-card ${selectedDetail?.maChiTiet === detail.maChiTiet ? 'selected' : ''} ${detail.soLuongTon === 0 ? 'out-of-stock' : ''}`}
-                        onClick={() => detail.soLuongTon > 0 && setSelectedDetail(detail)}
+                        className={`cot-variant-card
+                          ${selectedDetail?.maChiTiet === detail.maChiTiet ? 'selected' : ''}
+                          ${detail.soLuongTon === 0 ? 'out-of-stock' : ''}`}
+                        onClick={() => {
+                          if (detail.soLuongTon > 0) {
+                            setSelectedDetail(detail)
+                            setSelectedQuantity(1)
+                          }
+                        }}
                       >
-                        <div className="detail-info">
-                          <span className="color">{detail.mauSac}</span>
-                          <span className="size">Size: {detail.size}</span>
+                        <div className="cot-variant-top">
+                          <div className="cot-variant-thumb">
+                            {detail.hinhAnhChinh ? (
+                              <img
+                                src={`${BASE_IMAGE_URL}${detail.hinhAnhChinh}`}
+                                alt={`${detail.mauSac} - ${detail.size}`}
+                                onError={(e) => { 
+                                  (e.currentTarget as HTMLImageElement).src = "/default.png"
+                                }
+                              }
+                              />
+                            ) : null}
+                          </div>
+                          <div>
+                            <div className="cot-variant-color">{detail.mauSac}</div>
+                            <div className="cot-variant-size">Size {detail.size}</div>
+                          </div>
                         </div>
-                        <div className="detail-price">
-                          <span className="price">{formatCurrency(detail.giaBan)}</span>
-                          <span className="stock">Kho: {detail.soLuongTon}</span>
+                        <div className="cot-variant-bottom">
+                          <span className="cot-variant-price">{formatCurrency(detail.giaBan)}</span>
+                          <span className={`cot-stock-badge ${detail.soLuongTon === 0 ? 'empty' : ''}`}>
+                            {detail.soLuongTon === 0 ? 'Hết hàng' : `Kho: ${detail.soLuongTon}`}
+                          </span>
                         </div>
                       </div>
                     ))}
                   </div>
-                </div>
+                </>
               )}
 
-              {/* Số lượng */}
               {selectedDetail && (
-                <div 
-                  className="quantity-section"
+                <div
+                  className="cot-qty-section"
                   onClick={(e) => e.stopPropagation()}
                   onMouseDown={(e) => e.stopPropagation()}
                 >
-                  <label>Số lượng:</label>
-                  <div className="quantity-input">
+                  <span className="cot-qty-label">Số lượng</span>
+                  <div className="cot-qty-control">
                     <button
                       type="button"
-                      onClick={(e) => {
-                        e.preventDefault()
-                        e.stopPropagation()
-                        setSelectedQuantity(Math.max(1, selectedQuantity - 1))
-                      }}
-                      onMouseDown={(e) => e.stopPropagation()}
+                      className="cot-qty-btn"
+                      onClick={(e) => { e.stopPropagation(); setSelectedQuantity(Math.max(1, selectedQuantity - 1)) }}
                       disabled={selectedQuantity <= 1}
-                    >
-                      -
-                    </button>
+                    >−</button>
                     <input
                       type="number"
+                      className="cot-qty-input"
                       value={selectedQuantity}
                       onChange={(e) => {
                         const val = parseInt(e.target.value) || 1
                         setSelectedQuantity(Math.min(Math.max(1, val), selectedDetail.soLuongTon))
                       }}
                       onClick={(e) => e.stopPropagation()}
-                      onMouseDown={(e) => e.stopPropagation()}
                       onFocus={(e) => e.target.select()}
-                      min="1"
+                      min={1}
                       max={selectedDetail.soLuongTon}
                     />
                     <button
                       type="button"
-                      onClick={(e) => {
-                        e.preventDefault()
-                        e.stopPropagation()
-                        setSelectedQuantity(Math.min(selectedQuantity + 1, selectedDetail.soLuongTon))
-                      }}
-                      onMouseDown={(e) => e.stopPropagation()}
+                      className="cot-qty-btn"
+                      onClick={(e) => { e.stopPropagation(); setSelectedQuantity(Math.min(selectedQuantity + 1, selectedDetail.soLuongTon)) }}
                       disabled={selectedQuantity >= selectedDetail.soLuongTon}
-                    >
-                      +
-                    </button>
+                    >+</button>
                   </div>
-                  <span className="max-quantity">Tối đa: {selectedDetail.soLuongTon}</span>
+                  <span className="cot-qty-max">Tối đa: {selectedDetail.soLuongTon}</span>
                 </div>
               )}
             </div>
 
-            <div className="modal-footer">
-              <button 
-                className="btn btn-secondary"
-                onClick={() => setShowProductModal(false)}
-              >
+            <div className="cot-modal-footer">
+              <button className="cot-btn cot-btn-ghost" onClick={() => setShowProductModal(false)}>
                 Hủy
               </button>
               <button
-                className="btn btn-primary"
+                className="cot-btn cot-btn-primary"
                 onClick={handleAddItem}
                 disabled={!selectedDetail || isLoading}
               >
-                Thêm vào đơn
+                {isLoading ? 'Đang thêm...' : 'Thêm vào đơn'}
               </button>
             </div>
           </div>

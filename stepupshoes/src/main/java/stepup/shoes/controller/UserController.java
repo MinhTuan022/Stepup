@@ -104,6 +104,18 @@ public class UserController {
         );
     }
 
+    @PostMapping("/{id}/applicable-vouchers")
+    @Operation(summary = "Get applicable vouchers", description = "Lấy danh sách voucher khả dụng và kết quả validate cho tổng tiền")
+    public ResponseEntity<ApiResponseDTO<java.util.List<VoucherValidationDTO>>> getApplicableVouchers(
+            @PathVariable Integer id,
+            @RequestBody Map<String, Object> request) {
+        BigDecimal tongTien = new BigDecimal(request.get("tongTien").toString());
+        java.util.List<VoucherValidationDTO> list = userService.getApplicableVouchers(tongTien);
+        return ResponseEntity.ok(
+                new ApiResponseDTO<>(true, "Danh sách voucher áp dụng", list)
+        );
+    }
+
     @PostMapping("/{id}/orders")
     @Operation(summary = "Tạo đơn hàng mới", description = "Tạo đơn hàng online từ giỏ hàng")
     public ResponseEntity<ApiResponseDTO<DonHangDTO>> createOrder(

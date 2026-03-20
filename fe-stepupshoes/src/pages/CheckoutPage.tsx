@@ -1,10 +1,11 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import "../styles/CheckoutPage.css";
+import "./CheckoutPage.css";
 import { useCart } from "../context/CartContext";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
 import { userService, cartService } from "../services/api";
+import { BASE_IMAGE_URL } from "../constants";
 
 
 const CheckoutPage: React.FC = () => {
@@ -21,8 +22,31 @@ const CheckoutPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [voucherInfo, setVoucherInfo] = useState<any>(null);
   const [checkingVoucher, setCheckingVoucher] = useState(false);
+  const [availableVouchers, setAvailableVouchers] = useState<any[]>([]);
+  const [loadingVouchers, setLoadingVouchers] = useState(false);
+  const [showVoucherDropdown, setShowVoucherDropdown] = useState(false);
+  const [debouncedVoucher, setDebouncedVoucher] = useState("");
+  const voucherRef = useRef<HTMLDivElement | null>(null);
 
   const location = useLocation();
+
+  React.useEffect(() => {
+    let mounted = true
+    const loadProfile = async () => {
+      if (!user) return
+      try {
+        const profile = await userService.getUserProfile(user.maNguoiDung)
+        if (!mounted) return
+        setName(profile?.hoTen || profile?.tenDangNhap || "")
+        setAddress(profile?.diaChi || "")
+        setPhone(profile?.soDienThoai || "")
+      } catch (err) {
+        console.error('Failed to load user profile for checkout:', err)
+      }
+    }
+    loadProfile()
+    return () => { mounted = false }
+  }, [user])
 
   const selectedFromState: Array<{ maChiTiet: number; soLuong: number }> | undefined = (location.state as any)?.selectedItems;
 
@@ -62,12 +86,72 @@ const CheckoutPage: React.FC = () => {
     }
   };
 
+  React.useEffect(() => {
+    let mounted = true
+    const load = async () => {
+      setLoadingVouchers(true)
+      try {
+        if (!user) return
+        const list = await (await import('../services/api')).userService.getApplicableVouchers(user.maNguoiDung, total)
+        if (!mounted || !list) return
+        setAvailableVouchers(list)
+      } catch (err) {
+        console.debug('Could not load vouchers list:', err)
+      } finally {
+        if (mounted) setLoadingVouchers(false)
+      }
+    }
+
+    load()
+    return () => { mounted = false }
+  }, [total, user])
+
+  const handleSelectVoucher = (v: any) => {
+    const code = v.code || ''
+    setVoucher(code)
+    setVoucherInfo(v || null)
+    showToast(`Đã chọn voucher ${code}`, 'success')
+    setShowVoucherDropdown(false)
+  }
+
+  const handleRemoveVoucher = () => {
+    setVoucher('')
+    setVoucherInfo(null)
+  }
+
   const handleVoucherChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setVoucher(e.target.value);
     if (voucherInfo) {
       setVoucherInfo(null);
     }
+    setShowVoucherDropdown(true)
   };
+
+  // Debounce voucher input
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedVoucher(voucher.trim()), 300)
+    return () => clearTimeout(t)
+  }, [voucher])
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    const onDocClick = (ev: MouseEvent) => {
+      if (!voucherRef.current) return
+      if (!(ev.target instanceof Node)) return
+      if (!voucherRef.current.contains(ev.target)) {
+        setShowVoucherDropdown(false)
+      }
+    }
+    document.addEventListener('mousedown', onDocClick)
+    return () => document.removeEventListener('mousedown', onDocClick)
+  }, [])
+
+  const filteredVouchers = availableVouchers.filter((v: any) => {
+    const code = (v.code || '').toString().toLowerCase()
+    const desc = (v.moTa || '').toString().toLowerCase()
+    const q = debouncedVoucher.toLowerCase()
+    return !q || code.includes(q) || desc.includes(q)
+  }).slice(0, 10)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -136,7 +220,7 @@ const CheckoutPage: React.FC = () => {
               <li key={item.maChiTiet} className="checkout-cart-item">
                 <div className="checkout-cart-img">
                   {item.chiTietSanPham?.hinhAnhChinh ? (
-                    <img src={item.chiTietSanPham.hinhAnhChinh} alt={item.chiTietSanPham?.tenSanPham} />
+                    <img src={`${BASE_IMAGE_URL}${item.chiTietSanPham.hinhAnhChinh}`} alt={item.chiTietSanPham?.tenSanPham} />
                   ) : (
                     <div className="checkout-cart-img-placeholder" />
                   )}
@@ -170,6 +254,7 @@ const CheckoutPage: React.FC = () => {
             </div>
           </div>
         </div>
+
         <form className="checkout-form" onSubmit={handleSubmit}>
           <h3 className="checkout-subtitle">Thông tin nhận hàng</h3>
           <div className="form-group">
@@ -184,38 +269,100 @@ const CheckoutPage: React.FC = () => {
             <label>Số điện thoại</label>
             <input value={phone} onChange={e => setPhone(e.target.value)} required />
           </div>
-          <div className="form-group">
+
+          {/* ─── VOUCHER SECTION ─── */}
+          <div className="form-group voucher-section" ref={voucherRef}>
             <label>Mã voucher (nếu có)</label>
-            <div className="voucher-input-group">
-              <input 
-                type="text"
-                placeholder="Nhập mã voucher để được giảm giá"
-                value={voucher} 
-                onChange={handleVoucherChange}
-              />
-              <button 
-                type="button" 
-                className="btn-check-voucher"
-                onClick={handleCheckVoucher}
-                disabled={checkingVoucher || !voucher.trim()}
-              >
-                {checkingVoucher ? "Đang kiểm tra..." : "Kiểm tra"}
-              </button>
-            </div>
-            {voucherInfo?.valid && (
-              <div className="voucher-info success">
-                <div className="voucher-details">
-                  <div className="voucher-message">{voucherInfo.message}</div>
-                  {voucherInfo.moTa && (
-                    <div className="voucher-desc">{voucherInfo.moTa}</div>
-                  )}
-                  <div className="voucher-discount">
-                    Giảm giá: <strong>{voucherInfo.soTienGiam.toLocaleString("vi-VN")}₫</strong>
-                  </div>
+
+            {voucherInfo?.valid ? (
+              <div className="voucher-applied-badge">
+                <div className="voucher-applied-info">
+                  <span className="voucher-applied-code">{voucher}</span>
+                  {voucherInfo.moTa && <span className="voucher-applied-desc">{voucherInfo.moTa}</span>}
+                  <span className="voucher-applied-discount">Giảm {voucherInfo.soTienGiam.toLocaleString("vi-VN")}₫</span>
                 </div>
+                <button type="button" className="btn-remove-voucher" onClick={handleRemoveVoucher} title="Xóa voucher">✕</button>
               </div>
+            ) : (
+              <>
+                <div className="voucher-input-row">
+                  <div className="voucher-input-wrapper">
+                    <input
+                      type="text"
+                      placeholder="Nhập hoặc chọn mã voucher..."
+                      value={voucher}
+                      onChange={handleVoucherChange}
+                      onFocus={() => setShowVoucherDropdown(true)}
+                      autoComplete="off"
+                    />
+                    <button
+                      type="button"
+                      className={`btn-voucher-toggle ${showVoucherDropdown ? 'open' : ''}`}
+                      onClick={() => setShowVoucherDropdown(v => !v)}
+                      tabIndex={-1}
+                      title="Xem danh sách voucher"
+                    >
+                      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                        <path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                    </button>
+                  </div>
+                  <button
+                    type="button"
+                    className="btn-check-voucher"
+                    onClick={handleCheckVoucher}
+                    disabled={checkingVoucher || !voucher.trim()}
+                  >
+                    {checkingVoucher ? "Đang kiểm tra..." : "Áp dụng"}
+                  </button>
+                </div>
+
+                {/* Dropdown list */}
+                {showVoucherDropdown && (
+                  <div className="voucher-dropdown">
+                    {loadingVouchers ? (
+                      <div className="voucher-dropdown-empty">
+                        <span className="voucher-loading-spinner" />
+                        Đang tải danh sách voucher...
+                      </div>
+                    ) : filteredVouchers.length === 0 ? (
+                      <div className="voucher-dropdown-empty">
+                        {debouncedVoucher ? `Không tìm thấy voucher "${debouncedVoucher}"` : "Không có voucher khả dụng"}
+                      </div>
+                    ) : (
+                      <>
+                        <div className="voucher-dropdown-header">
+                          {debouncedVoucher ? `Kết quả cho "${debouncedVoucher}"` : "Voucher có thể dùng"}
+                        </div>
+                        {filteredVouchers.map((v: any) => (
+                          <div
+                            key={v.code || v.maVoucher || v.id}
+                            className={`voucher-item ${v.valid ? 'valid' : 'invalid'}`}
+                            onClick={() => v.valid && handleSelectVoucher(v)}
+                          >
+                            <div className="voucher-item-left">
+                              <div className="voucher-item-info">
+                                <span className="voucher-item-code">{v.code}</span>
+                                {v.moTa && <span className="voucher-item-desc">{v.moTa}</span>}
+                              </div>
+                            </div>
+                            <div className="voucher-item-right">
+                              <span className="voucher-item-amount">-{(v.soTienGiam || 0).toLocaleString('vi-VN')}₫</span>
+                              {v.valid
+                                ? <span className="voucher-item-btn">Chọn</span>
+                                : <span className="voucher-item-invalid">Không hợp lệ</span>
+                              }
+                            </div>
+                          </div>
+                        ))}
+                      </>
+                    )}
+                  </div>
+                )}
+              </>
             )}
           </div>
+
           <div className="form-group">
             <label>Ghi chú (nếu có)</label>
             <textarea 
