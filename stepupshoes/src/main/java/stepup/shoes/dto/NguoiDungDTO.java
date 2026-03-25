@@ -15,6 +15,7 @@ public class NguoiDungDTO {
     private String hoTen;
     private String soDienThoai;
     private String diaChi;
+    private String maTinh;
     private String vaiTro;
     private Boolean trangThai;
     private LocalDateTime ngayTao;

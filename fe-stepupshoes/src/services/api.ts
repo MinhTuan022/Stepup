@@ -235,6 +235,49 @@ export const userService = {
     const data: ApiResponse<any> = await response.json();
     return data.data;
   },
+  getShippingRegions: async () => {
+    const response = await fetch(`${API_BASE_URL}/v1/shipping-regions`, {
+      headers: getHeaders(),
+    });
+    if (!response.ok) throw new Error('Lỗi khi tải danh sách vùng giao hàng');
+    const data: ApiResponse<any[]> = await response.json();
+    return data.data;
+  },
+    createShippingRegion: async (region: { maTinh: string; tenTinh: string; phi?: number; loai?: string; vungCha?: string; moTa?: string }) => {
+      const response = await fetch(`${API_BASE_URL}/v1/shipping-regions`, {
+        method: 'POST',
+        headers: getHeaders(),
+        body: JSON.stringify(region),
+      });
+      if (!response.ok) {
+        throw new Error('Failed to create shipping region');
+      }
+      const data: ApiResponse<any> = await response.json();
+      return data.data;
+    },
+    updateShippingRegion: async (maTinh: string, region: { tenTinh?: string; phi?: number; loai?: string; vungCha?: string; moTa?: string }) => {
+      const response = await fetch(`${API_BASE_URL}/v1/shipping-regions/${encodeURIComponent(maTinh)}`, {
+        method: 'PUT',
+        headers: getHeaders(),
+        body: JSON.stringify(region),
+      });
+      if (!response.ok) {
+        throw new Error('Failed to update shipping region');
+      }
+      const data: ApiResponse<any> = await response.json();
+      return data.data;
+    },
+    deleteShippingRegion: async (maTinh: string) => {
+      const response = await fetch(`${API_BASE_URL}/v1/shipping-regions/${encodeURIComponent(maTinh)}`, {
+        method: 'DELETE',
+        headers: getHeaders(),
+      });
+      if (!response.ok) {
+        throw new Error('Failed to delete shipping region');
+      }
+      const data: ApiResponse<any> = await response.json();
+      return data.data;
+    },
   getApplicableVouchers: async (userId: number, tongTien: number) => {
     const response = await fetch(`${API_BASE_URL}/v1/users/${userId}/applicable-vouchers`, {
       method: 'POST',

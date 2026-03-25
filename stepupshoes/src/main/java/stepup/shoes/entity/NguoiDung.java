@@ -34,6 +34,9 @@ public class NguoiDung {
 
     @Column(name = "DiaChi", length = 255)
     private String diaChi;
+    
+    @Column(name = "MaTinh", length = 50)
+    private String maTinh;
 
     @Column(name = "VaiTro", length = 20)
     @Builder.Default

@@ -21,6 +21,24 @@ CREATE TABLE DanhMuc (
 GO
 
 -- =====================================
+-- BẢNG TỈNH / VÙNG VẬN CHUYỂN
+-- =====================================
+
+CREATE TABLE TinhThanh (
+    MaTinh NVARCHAR(50) PRIMARY KEY,
+    TenTinh NVARCHAR(255) NOT NULL,
+    Loai NVARCHAR(50),
+    VungCha NVARCHAR(255),
+    Phi DECIMAL(18,2) NOT NULL DEFAULT 30000,
+    MoTa NVARCHAR(500),
+    NgayTao DATETIME DEFAULT GETDATE(),
+    NgayCapNhat DATETIME DEFAULT GETDATE()
+);
+GO
+
+-- Dữ liệu mẫu (seed) cho bảng TinhThanh dựa trên danh sách tỉnh/thành cung cấp
+
+-- =====================================
 -- BẢNG SẢN PHẨM
 -- =====================================
 CREATE TABLE SanPham (
@@ -79,6 +97,7 @@ CREATE TABLE NguoiDung (
     HoTen NVARCHAR(100) NOT NULL,
     SoDienThoai NVARCHAR(15),
     DiaChi NVARCHAR(255),
+    MaTinh NVARCHAR(50) NULL,
     VaiTro NVARCHAR(20)
         CHECK (VaiTro IN ('khach_hang', 'nhan_vien', 'quan_tri'))
         DEFAULT 'khach_hang',
@@ -218,6 +237,47 @@ GO
 -- DỮ LIỆU MẪU BAN ĐẦU
 -- =====================================
 
+INSERT INTO TinhThanh (MaTinh, TenTinh, Loai, VungCha, Phi, MoTa)
+VALUES
+(N'HN', N'Hà Nội', N'Tỉnh/Thành', NULL, 0, N'Thủ đô, miễn phí giao hàng nội thành'),
+(N'HCM', N'Thành phố Hồ Chí Minh', N'Tỉnh/Thành', NULL, 90000, NULL),
+(N'DN', N'Đà Nẵng', N'Tỉnh/Thành', NULL, 65000, NULL),
+(N'HP', N'Hải Phòng', N'Tỉnh/Thành', NULL, 35000, NULL),
+(N'CT', N'Cần Thơ', N'Tỉnh/Thành', NULL, 100000, NULL),
+(N'HUE', N'Thừa Thiên Huế', N'Tỉnh/Thành', NULL, 65000, NULL),
+(N'LC', N'Lai Châu', N'Tỉnh/Thành', NULL, 60000, NULL),
+(N'DB', N'Điện Biên', N'Tỉnh/Thành', NULL, 60000, NULL),
+(N'SL', N'Sơn La', N'Tỉnh/Thành', NULL, 50000, NULL),
+(N'LS', N'Lạng Sơn', N'Tỉnh/Thành', NULL, 45000, NULL),
+(N'QN', N'Quảng Ninh', N'Tỉnh/Thành', NULL, 40000, NULL),
+(N'TH', N'Thanh Hóa', N'Tỉnh/Thành', NULL, 45000, NULL),
+(N'NA', N'Nghệ An', N'Tỉnh/Thành', NULL, 50000, NULL),
+(N'HT', N'Hà Tĩnh', N'Tỉnh/Thành', NULL, 55000, NULL),
+(N'CB', N'Cao Bằng', N'Tỉnh/Thành', NULL, 55000, NULL),
+(N'TQ', N'Tuyên Quang', N'Tỉnh/Thành', NULL, 40000, NULL),
+(N'LCYB', N'Lào Cai', N'Tỉnh/Thành', NULL, 50000, NULL),
+(N'BK', N'Bắc Kạn', N'Tỉnh/Thành', NULL, 40000, NULL),
+(N'PT', N'Phú Thọ', N'Tỉnh/Thành', NULL, 30000, NULL),
+(N'BN', N'Bắc Ninh', N'Tỉnh/Thành', NULL, 25000, NULL),
+(N'HY', N'Hưng Yên', N'Tỉnh/Thành', NULL, 25000, NULL),
+(N'NB', N'Ninh Bình', N'Tỉnh/Thành', NULL, 35000, NULL),
+(N'BD', N'Bình Dương', N'Tỉnh/Thành', NULL, 90000, NULL),
+(N'BRVT', N'Bà Rịa - Vũng Tàu', N'Tỉnh/Thành', NULL, 95000, NULL),
+(N'KH', N'Khánh Hòa', N'Tỉnh/Thành', NULL, 80000, NULL),
+(N'DL', N'Đắk Lắk', N'Tỉnh/Thành', NULL, 85000, NULL),
+(N'GL', N'Gia Lai', N'Tỉnh/Thành', NULL, 80000, NULL),
+(N'LD', N'Lâm Đồng', N'Tỉnh/Thành', NULL, 90000, NULL),
+(N'QT', N'Quảng Trị', N'Tỉnh/Thành', NULL, 60000, NULL),
+(N'QB', N'Quảng Bình', N'Tỉnh/Thành', NULL, 60000, NULL),
+(N'QNAM', N'Quảng Nam', N'Tỉnh/Thành', NULL, 70000, NULL),
+(N'QNG', N'Quảng Ngãi', N'Tỉnh/Thành', NULL, 70000, NULL),
+(N'BDINH', N'Bình Định', N'Tỉnh/Thành', NULL, 75000, NULL),
+(N'PY', N'Phú Yên', N'Tỉnh/Thành', NULL, 75000, NULL),
+(N'LA', N'Long An', N'Tỉnh/Thành', NULL, 95000, NULL),
+(N'AG', N'An Giang', N'Tỉnh/Thành', NULL, 105000, NULL),
+(N'KG', N'Kiên Giang', N'Tỉnh/Thành', NULL, 105000, NULL),
+(N'CM', N'Cà Mau', N'Tỉnh/Thành', NULL, 120000, NULL);
+GO
 -- Danh mục (20 danh mục)
 INSERT INTO DanhMuc (TenDanhMuc, MoTa, MaDanhMucCha, TrangThai) VALUES
 (N'Giày Thể Thao', N'Giày dành cho thể thao và hoạt động năng động', NULL, 1),
@@ -707,3 +767,4 @@ INSERT INTO LichSuVoucher (MaVoucher, MaDonHang, MaNguoiDung, GiaTriGiam, NgaySu
 (18, 3, 6, 0, DATEADD(day, -25, GETDATE())),            -- SPORT25
 (19, 1, 4, 0, DATEADD(day, -30, GETDATE()));            -- APP10K
 GO
+

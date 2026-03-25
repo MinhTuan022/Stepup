@@ -13,6 +13,7 @@ interface UserProfile {
   soDienThoai: string;
   diaChi: string;
   ngayTao: string;
+  maTinh?: string;
 }
 
 interface Order {
@@ -72,7 +73,9 @@ const UserProfilePage: React.FC = () => {
     email: '',
     soDienThoai: '',
     diaChi: '',
+    maTinh: '',
   });
+  const [shippingRegions, setShippingRegions] = useState<Array<any>>([]);
 
   const [passwordForm, setPasswordForm] = useState({
     oldPassword: '',
@@ -85,6 +88,19 @@ const UserProfilePage: React.FC = () => {
     if (user) {
       loadUserData();
     }
+    // load shipping regions for select
+    let mounted = true
+    const loadRegions = async () => {
+      try {
+        const regions = await userService.getShippingRegions()
+        if (!mounted) return
+        setShippingRegions(regions || [])
+      } catch (err) {
+        console.warn('Could not load shipping regions:', err)
+      }
+    }
+    loadRegions()
+    return () => { mounted = false }
   }, [user]);
 
   useEffect(() => {
@@ -131,6 +147,7 @@ const UserProfilePage: React.FC = () => {
         email: profileData.email || '',
         soDienThoai: profileData.soDienThoai || '',
         diaChi: profileData.diaChi || '',
+        maTinh: profileData.regionCode || '',
       });
     } catch (error) {
       showToast('Lỗi khi tải thông tin người dùng', 'error');
@@ -145,7 +162,14 @@ const UserProfilePage: React.FC = () => {
     if (!user) return;
 
     try {
-      const updatedProfile = await userService.updateUserProfile(user.maNguoiDung, editForm);
+      const payload = {
+        hoTen: editForm.hoTen,
+        email: editForm.email,
+        soDienThoai: editForm.soDienThoai,
+        diaChi: editForm.diaChi,
+        maTinh: editForm.maTinh || undefined,
+      };
+      const updatedProfile = await userService.updateUserProfile(user.maNguoiDung, payload);
       setProfile(updatedProfile);
       setIsEditing(false);
       showToast('Cập nhật thông tin thành công', 'success');
@@ -326,6 +350,15 @@ const UserProfilePage: React.FC = () => {
                     <p>{profile?.diaChi || 'Chưa cập nhật'}</p>
                   </div>
                   <div className="info-group">
+                    <label>Tỉnh / Thành (mặc định giao hàng):</label>
+                    <p>{(() => {
+                      const code = (profile?.maTinh || profile?.maTinh || '').toString().trim().toUpperCase();
+                      if (!code) return 'Chưa cập nhật';
+                      const found = shippingRegions.find(r => ((r.maTinh || r.code) || '').toString().toUpperCase() === code);
+                      return found ? (found.tenTinh || found.name || code) : code;
+                    })()}</p>
+                  </div>
+                  <div className="info-group">
                     <label>Tên đăng nhập:</label>
                     <p>{profile?.tenDangNhap}</p>
                   </div>
@@ -411,6 +444,15 @@ const UserProfilePage: React.FC = () => {
                       rows={3}
                     />
                   </div>
+                  <div className="form-group">
+                    <label>Tỉnh / Thành (mặc định giao hàng)</label>
+                    <select value={editForm.maTinh} onChange={(e) => setEditForm({...editForm, maTinh: e.target.value})}>
+                      <option value="">-- Chọn tỉnh/thành --</option>
+                      {shippingRegions.map(r => (
+                        <option key={r.maTinh || r.code} value={r.maTinh || r.code}>{r.tenTinh || r.name} ({r.maTinh || r.code})</option>
+                      ))}
+                    </select>
+                  </div>
                   <div className="form-actions">
                     <button type="submit" className="btn-submit">Lưu thay đổi</button>
                     <button 
@@ -423,6 +465,7 @@ const UserProfilePage: React.FC = () => {
                           email: profile?.email || '',
                           soDienThoai: profile?.soDienThoai || '',
                           diaChi: profile?.diaChi || '',
+                          maTinh: profile?.maTinh || '',
                         });
                       }}
                     >

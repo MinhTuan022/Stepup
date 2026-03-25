@@ -10,6 +10,7 @@ import ReviewsTab from "./ReviewsTab";
 import CounterOrderTab from "./CounterOrderTab";
 import DanhMucTab from "./DanhMucTab";
 import ProductsTab from "./ProductsTab";
+import ShippingTab from "./ShippingTab";
 
 type TabType =
   | "statistics"
@@ -19,7 +20,8 @@ type TabType =
   | "reviews"
   | "counter-order"
   | "danhmuc"
-  | "products";
+  | "products"
+  | "shipping";
 
 const AdminDashboard = () => {
   const { user, logout } = useAuth();
@@ -41,7 +43,7 @@ const AdminDashboard = () => {
       const params = new URLSearchParams(location.search)
       const tabFromQuery = params.get('tab') as TabType | null
       const validTabs: TabType[] = [
-        'statistics','users','orders','vouchers','reviews','counter-order','danhmuc','products'
+        'statistics','users','orders','vouchers','reviews','counter-order','danhmuc','products','shipping'
       ]
       if (tabFromQuery && validTabs.includes(tabFromQuery) && hasAccessToTab(tabFromQuery)) {
         setActiveTab(tabFromQuery)
@@ -88,6 +90,8 @@ const AdminDashboard = () => {
         return <ReviewsTab />;
       case "counter-order":
         return <CounterOrderTab />;
+      case "shipping":
+        return <ShippingTab />;
       case "danhmuc":
         return <DanhMucTab />;
       case "products":
@@ -184,6 +188,16 @@ const AdminDashboard = () => {
                   onClick={() => setActiveTab("vouchers")}
                 >
                   Quản lý voucher
+                </button>
+              </li>
+            )}
+            {hasAccessToTab("shipping") && (
+              <li>
+                <button
+                  className={`nav-btn ${activeTab === "shipping" ? "active" : ""}`}
+                  onClick={() => setActiveTab("shipping")}
+                >
+                  Quản lý phí ship
                 </button>
               </li>
             )}

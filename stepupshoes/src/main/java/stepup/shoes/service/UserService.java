@@ -39,6 +39,7 @@ public class UserService {
     private final VoucherRepository voucherRepository;
     private final LichSuTrangThaiDonHangRepository lichSuTrangThaiDonHangRepository;
     private final PasswordEncoder passwordEncoder;
+    private final ShippingService shippingService;
 
     // ==================== USER PROFILE ====================
 
@@ -56,6 +57,7 @@ public class UserService {
         if (nguoiDungDTO.getEmail() != null) user.setEmail(nguoiDungDTO.getEmail());
         if (nguoiDungDTO.getSoDienThoai() != null) user.setSoDienThoai(nguoiDungDTO.getSoDienThoai());
         if (nguoiDungDTO.getDiaChi() != null) user.setDiaChi(nguoiDungDTO.getDiaChi());
+        if (nguoiDungDTO.getMaTinh() != null) user.setMaTinh(nguoiDungDTO.getMaTinh());
         
         user.setNgayCapNhat(LocalDateTime.now());
         NguoiDung updatedUser = nguoiDungRepository.save(user);
@@ -274,6 +276,10 @@ public class UserService {
             }
         }
         
+        // Calculate shipping fee using ShippingService (by regionCode if provided)
+        BigDecimal shippingFee = shippingService.calculateFee(tongTien, requestDTO.getMaTinh());
+        savedOrder.setPhiVanChuyen(shippingFee);
+
         savedOrder.setTongTien(tongTien);
         BigDecimal thanhTien = tongTien.add(savedOrder.getPhiVanChuyen()).subtract(savedOrder.getGiamGia());
         savedOrder.setThanhTien(thanhTien);
@@ -392,6 +398,7 @@ public class UserService {
                 .hoTen(user.getHoTen())
                 .soDienThoai(user.getSoDienThoai())
                 .diaChi(user.getDiaChi())
+                .maTinh(user.getMaTinh())
                 .vaiTro(user.getVaiTro())
                 .trangThai(user.getTrangThai())
                 .ngayTao(user.getNgayTao())

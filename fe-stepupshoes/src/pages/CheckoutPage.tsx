@@ -7,18 +7,19 @@ import { useToast } from "../context/ToastContext";
 import { userService, cartService } from "../services/api";
 import { BASE_IMAGE_URL } from "../constants";
 
-
 const CheckoutPage: React.FC = () => {
   const navigate = useNavigate();
   const { cart, clearCart } = useCart();
   const { user } = useAuth();
   const { showToast } = useToast();
-  
+
   const [name, setName] = useState("");
   const [address, setAddress] = useState("");
   const [phone, setPhone] = useState("");
   const [voucher, setVoucher] = useState("");
   const [note, setNote] = useState("");
+  const [maTinh, setMaTinh] = useState("");
+  const [shippingRegions, setShippingRegions] = useState<Array<any>>([]);
   const [loading, setLoading] = useState(false);
   const [voucherInfo, setVoucherInfo] = useState<any>(null);
   const [checkingVoucher, setCheckingVoucher] = useState(false);
@@ -31,35 +32,87 @@ const CheckoutPage: React.FC = () => {
   const location = useLocation();
 
   React.useEffect(() => {
-    let mounted = true
+    let mounted = true;
     const loadProfile = async () => {
-      if (!user) return
+      if (!user) return;
       try {
-        const profile = await userService.getUserProfile(user.maNguoiDung)
-        if (!mounted) return
-        setName(profile?.hoTen || profile?.tenDangNhap || "")
-        setAddress(profile?.diaChi || "")
-        setPhone(profile?.soDienThoai || "")
+        const profile = await userService.getUserProfile(user.maNguoiDung);
+        if (!mounted) return;
+        setName(profile?.hoTen || profile?.tenDangNhap || "");
+        setAddress(profile?.diaChi || "");
+        setPhone(profile?.soDienThoai || "");
+        setMaTinh(profile?.maTinh || "");
       } catch (err) {
-        console.error('Failed to load user profile for checkout:', err)
+        console.error("Failed to load user profile for checkout:", err);
       }
+    };
+    loadProfile();
+    return () => {
+      mounted = false;
+    };
+  }, [user]);
+
+  // load shipping regions from API
+  useEffect(() => {
+    let mounted = true;
+    const loadRegions = async () => {
+      try {
+        const regions = await userService.getShippingRegions();
+        if (!mounted) return;
+        setShippingRegions(regions || []);
+      } catch (err) {
+        console.warn("Could not load shipping regions:", err);
+      }
+    };
+    loadRegions();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const selectedFromState:
+    | Array<{ maChiTiet: number; soLuong: number }>
+    | undefined = (location.state as any)?.selectedItems;
+
+  const itemsToCheckout =
+    selectedFromState && selectedFromState.length > 0
+      ? cart
+          .filter((c) =>
+            selectedFromState.some((s) => s.maChiTiet === c.maChiTiet),
+          )
+          .map((c) => {
+            const s = selectedFromState.find(
+              (s) => s.maChiTiet === c.maChiTiet,
+            )!;
+            return { ...c, soLuong: s.soLuong };
+          })
+      : cart;
+
+  const total = itemsToCheckout.reduce(
+    (sum, item) => sum + (item.chiTietSanPham?.giaBan || 0) * item.soLuong,
+    0,
+  );
+  const discount = voucherInfo?.valid ? voucherInfo.soTienGiam || 0 : 0;
+
+  const computeShippingClient = (tot: number, rc: string) => {
+    // free threshold: orders > 10,000,000
+    if (tot > 10000000) return 0;
+    if (!rc) return 30000;
+    const key = (rc || "").toString().trim().toUpperCase();
+    const found = shippingRegions.find(
+      (r) => (r.maTinh || r.code || "").toString().toUpperCase() === key,
+    );
+    if (found) {
+      const phiVal = found.phi ?? found.fee;
+      const num =
+        typeof phiVal === "number" ? phiVal : phiVal ? Number(phiVal) : NaN;
+      if (!isNaN(num)) return num;
     }
-    loadProfile()
-    return () => { mounted = false }
-  }, [user])
+    return 30000;
+  };
 
-  const selectedFromState: Array<{ maChiTiet: number; soLuong: number }> | undefined = (location.state as any)?.selectedItems;
-
-  const itemsToCheckout = selectedFromState && selectedFromState.length > 0
-    ? cart.filter(c => selectedFromState.some(s => s.maChiTiet === c.maChiTiet)).map(c => {
-        const s = selectedFromState.find(s => s.maChiTiet === c.maChiTiet)!;
-        return { ...c, soLuong: s.soLuong };
-      })
-    : cart;
-
-  const total = itemsToCheckout.reduce((sum, item) => sum + (item.chiTietSanPham?.giaBan || 0) * item.soLuong, 0);
-  const discount = voucherInfo?.valid ? voucherInfo.soTienGiam : 0;
-  const finalTotal = total - discount;
+  const shipping = computeShippingClient(total, maTinh);
+  const finalTotal = total - discount + shipping;
 
   const handleCheckVoucher = async () => {
     if (!voucher.trim()) {
@@ -78,7 +131,8 @@ const CheckoutPage: React.FC = () => {
         showToast(result.message, "error");
       }
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Lỗi khi kiểm tra voucher";
+      const message =
+        error instanceof Error ? error.message : "Lỗi khi kiểm tra voucher";
       showToast(message, "error");
       setVoucherInfo(null);
     } finally {
@@ -87,75 +141,81 @@ const CheckoutPage: React.FC = () => {
   };
 
   React.useEffect(() => {
-    let mounted = true
+    let mounted = true;
     const load = async () => {
-      setLoadingVouchers(true)
+      setLoadingVouchers(true);
       try {
-        if (!user) return
-        const list = await (await import('../services/api')).userService.getApplicableVouchers(user.maNguoiDung, total)
-        if (!mounted || !list) return
-        setAvailableVouchers(list)
+        if (!user) return;
+        const list = await (
+          await import("../services/api")
+        ).userService.getApplicableVouchers(user.maNguoiDung, total);
+        if (!mounted || !list) return;
+        setAvailableVouchers(list);
       } catch (err) {
-        console.debug('Could not load vouchers list:', err)
+        console.debug("Could not load vouchers list:", err);
       } finally {
-        if (mounted) setLoadingVouchers(false)
+        if (mounted) setLoadingVouchers(false);
       }
-    }
+    };
 
-    load()
-    return () => { mounted = false }
-  }, [total, user])
+    load();
+    return () => {
+      mounted = false;
+    };
+  }, [total, user]);
 
   const handleSelectVoucher = (v: any) => {
-    const code = v.code || ''
-    setVoucher(code)
-    setVoucherInfo(v || null)
-    showToast(`Đã chọn voucher ${code}`, 'success')
-    setShowVoucherDropdown(false)
-  }
+    const code = v.code || "";
+    setVoucher(code);
+    setVoucherInfo(v || null);
+    showToast(`Đã chọn voucher ${code}`, "success");
+    setShowVoucherDropdown(false);
+  };
 
   const handleRemoveVoucher = () => {
-    setVoucher('')
-    setVoucherInfo(null)
-  }
+    setVoucher("");
+    setVoucherInfo(null);
+  };
 
   const handleVoucherChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setVoucher(e.target.value);
     if (voucherInfo) {
       setVoucherInfo(null);
     }
-    setShowVoucherDropdown(true)
+    setShowVoucherDropdown(true);
   };
 
   // Debounce voucher input
   useEffect(() => {
-    const t = setTimeout(() => setDebouncedVoucher(voucher.trim()), 300)
-    return () => clearTimeout(t)
-  }, [voucher])
+    const t = setTimeout(() => setDebouncedVoucher(voucher.trim()), 300);
+    return () => clearTimeout(t);
+  }, [voucher]);
 
   // Close dropdown on outside click
   useEffect(() => {
     const onDocClick = (ev: MouseEvent) => {
-      if (!voucherRef.current) return
-      if (!(ev.target instanceof Node)) return
+      if (!voucherRef.current) return;
+      if (!(ev.target instanceof Node)) return;
       if (!voucherRef.current.contains(ev.target)) {
-        setShowVoucherDropdown(false)
+        setShowVoucherDropdown(false);
       }
-    }
-    document.addEventListener('mousedown', onDocClick)
-    return () => document.removeEventListener('mousedown', onDocClick)
-  }, [])
+    };
+    document.addEventListener("mousedown", onDocClick);
+    return () => document.removeEventListener("mousedown", onDocClick);
+  }, []);
 
-  const filteredVouchers = availableVouchers.filter((v: any) => {
-    const code = (v.code || '').toString().toLowerCase()
-    const desc = (v.moTa || '').toString().toLowerCase()
-    const q = debouncedVoucher.toLowerCase()
-    return !q || code.includes(q) || desc.includes(q)
-  }).slice(0, 10)
+  const filteredVouchers = availableVouchers
+    .filter((v: any) => {
+      const code = (v.code || "").toString().toLowerCase();
+      const desc = (v.moTa || "").toString().toLowerCase();
+      const q = debouncedVoucher.toLowerCase();
+      return !q || code.includes(q) || desc.includes(q);
+    })
+    .slice(0, 10);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!user) {
       showToast("Vui lòng đăng nhập để đặt hàng", "error");
       navigate("/login");
@@ -180,14 +240,15 @@ const CheckoutPage: React.FC = () => {
         diaChiGiaoHang: address.trim(),
         ghiChu: note.trim() || undefined,
         maVoucher: voucher.trim() || undefined,
-        items: itemsToCheckout.map(item => ({
-            maChiTiet: item.maChiTiet,
-            soLuong: item.soLuong,
-          })),
+        maTinh: maTinh || undefined,
+        items: itemsToCheckout.map((item) => ({
+          maChiTiet: item.maChiTiet,
+          soLuong: item.soLuong,
+        })),
       };
 
       await userService.createOrder(user.maNguoiDung, orderData);
-      
+
       try {
         await cartService.clearCart(user.maNguoiDung);
         clearCart();
@@ -196,13 +257,13 @@ const CheckoutPage: React.FC = () => {
       }
 
       showToast("Đặt hàng thành công!", "success");
-      
+
       setTimeout(() => {
-        navigate(`/profile`, { state: { tab: 'orders' } });
+        navigate(`/profile`, { state: { tab: "orders" } });
       }, 1500);
-      
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Lỗi khi đặt hàng";
+      const message =
+        error instanceof Error ? error.message : "Lỗi khi đặt hàng";
       showToast(message, "error");
     } finally {
       setLoading(false);
@@ -220,18 +281,25 @@ const CheckoutPage: React.FC = () => {
               <li key={item.maChiTiet} className="checkout-cart-item">
                 <div className="checkout-cart-img">
                   {item.chiTietSanPham?.hinhAnhChinh ? (
-                    <img src={`${BASE_IMAGE_URL}${item.chiTietSanPham.hinhAnhChinh}`} alt={item.chiTietSanPham?.tenSanPham} />
+                    <img
+                      src={`${BASE_IMAGE_URL}${item.chiTietSanPham.hinhAnhChinh}`}
+                      alt={item.chiTietSanPham?.tenSanPham}
+                    />
                   ) : (
                     <div className="checkout-cart-img-placeholder" />
                   )}
                 </div>
                 <div className="checkout-cart-info">
-                  <div className="checkout-cart-name">{item.chiTietSanPham?.tenSanPham || item.maChiTiet}</div>
+                  <div className="checkout-cart-name">
+                    {item.chiTietSanPham?.tenSanPham || item.maChiTiet}
+                  </div>
                   <div className="checkout-cart-meta">
                     <span>Màu: {item.chiTietSanPham?.mauSac}</span>
                     <span>Size: {item.chiTietSanPham?.size}</span>
                   </div>
-                  <div className="checkout-cart-price">{item.chiTietSanPham?.giaBan?.toLocaleString("vi-VN")}₫</div>
+                  <div className="checkout-cart-price">
+                    {item.chiTietSanPham?.giaBan?.toLocaleString("vi-VN")}₫
+                  </div>
                   <div className="checkout-cart-qty">x{item.soLuong}</div>
                 </div>
               </li>
@@ -242,15 +310,29 @@ const CheckoutPage: React.FC = () => {
               <span>Tạm tính:</span>
               <span>{total.toLocaleString("vi-VN")}₫</span>
             </div>
+            <div className="checkout-cart-row shipping">
+              <span>Phí vận chuyển:</span>
+              <span className="shipping-value">
+                {shipping === 0 ? (
+                  <span className="free-badge">Miễn phí</span>
+                ) : (
+                  `${shipping.toLocaleString("vi-VN")}₫`
+                )}
+              </span>
+            </div>
             {voucherInfo?.valid && (
               <div className="checkout-cart-row checkout-discount">
                 <span>Giảm giá ({voucher}):</span>
-                <span className="discount-value">-{discount.toLocaleString("vi-VN")}₫</span>
+                <span className="discount-value">
+                  -{discount.toLocaleString("vi-VN")}₫
+                </span>
               </div>
             )}
             <div className="checkout-cart-total">
               <span>Tổng cộng:</span>
-              <span className="checkout-cart-total-value">{finalTotal.toLocaleString("vi-VN")}₫</span>
+              <span className="checkout-cart-total-value">
+                {finalTotal.toLocaleString("vi-VN")}₫
+              </span>
             </div>
           </div>
         </div>
@@ -259,15 +341,27 @@ const CheckoutPage: React.FC = () => {
           <h3 className="checkout-subtitle">Thông tin nhận hàng</h3>
           <div className="form-group">
             <label>Họ tên</label>
-            <input value={name} onChange={e => setName(e.target.value)} required />
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              required
+            />
           </div>
           <div className="form-group">
             <label>Địa chỉ nhận hàng</label>
-            <input value={address} onChange={e => setAddress(e.target.value)} required />
+            <input
+              value={address}
+              onChange={(e) => setAddress(e.target.value)}
+              required
+            />
           </div>
           <div className="form-group">
             <label>Số điện thoại</label>
-            <input value={phone} onChange={e => setPhone(e.target.value)} required />
+            <input
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              required
+            />
           </div>
 
           {/* ─── VOUCHER SECTION ─── */}
@@ -278,10 +372,23 @@ const CheckoutPage: React.FC = () => {
               <div className="voucher-applied-badge">
                 <div className="voucher-applied-info">
                   <span className="voucher-applied-code">{voucher}</span>
-                  {voucherInfo.moTa && <span className="voucher-applied-desc">{voucherInfo.moTa}</span>}
-                  <span className="voucher-applied-discount">Giảm {voucherInfo.soTienGiam.toLocaleString("vi-VN")}₫</span>
+                  {voucherInfo.moTa && (
+                    <span className="voucher-applied-desc">
+                      {voucherInfo.moTa}
+                    </span>
+                  )}
+                  <span className="voucher-applied-discount">
+                    Giảm {voucherInfo.soTienGiam.toLocaleString("vi-VN")}₫
+                  </span>
                 </div>
-                <button type="button" className="btn-remove-voucher" onClick={handleRemoveVoucher} title="Xóa voucher">✕</button>
+                <button
+                  type="button"
+                  className="btn-remove-voucher"
+                  onClick={handleRemoveVoucher}
+                  title="Xóa voucher"
+                >
+                  ✕
+                </button>
               </div>
             ) : (
               <>
@@ -297,13 +404,24 @@ const CheckoutPage: React.FC = () => {
                     />
                     <button
                       type="button"
-                      className={`btn-voucher-toggle ${showVoucherDropdown ? 'open' : ''}`}
-                      onClick={() => setShowVoucherDropdown(v => !v)}
+                      className={`btn-voucher-toggle ${showVoucherDropdown ? "open" : ""}`}
+                      onClick={() => setShowVoucherDropdown((v) => !v)}
                       tabIndex={-1}
                       title="Xem danh sách voucher"
                     >
-                      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                        <path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                      <svg
+                        width="16"
+                        height="16"
+                        viewBox="0 0 16 16"
+                        fill="none"
+                      >
+                        <path
+                          d="M4 6l4 4 4-4"
+                          stroke="currentColor"
+                          strokeWidth="1.5"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
                       </svg>
                     </button>
                   </div>
@@ -327,31 +445,46 @@ const CheckoutPage: React.FC = () => {
                       </div>
                     ) : filteredVouchers.length === 0 ? (
                       <div className="voucher-dropdown-empty">
-                        {debouncedVoucher ? `Không tìm thấy voucher "${debouncedVoucher}"` : "Không có voucher khả dụng"}
+                        {debouncedVoucher
+                          ? `Không tìm thấy voucher "${debouncedVoucher}"`
+                          : "Không có voucher khả dụng"}
                       </div>
                     ) : (
                       <>
                         <div className="voucher-dropdown-header">
-                          {debouncedVoucher ? `Kết quả cho "${debouncedVoucher}"` : "Voucher có thể dùng"}
+                          {debouncedVoucher
+                            ? `Kết quả cho "${debouncedVoucher}"`
+                            : "Voucher có thể dùng"}
                         </div>
                         {filteredVouchers.map((v: any) => (
                           <div
                             key={v.code || v.maVoucher || v.id}
-                            className={`voucher-item ${v.valid ? 'valid' : 'invalid'}`}
+                            className={`voucher-item ${v.valid ? "valid" : "invalid"}`}
                             onClick={() => v.valid && handleSelectVoucher(v)}
                           >
                             <div className="voucher-item-left">
                               <div className="voucher-item-info">
-                                <span className="voucher-item-code">{v.code}</span>
-                                {v.moTa && <span className="voucher-item-desc">{v.moTa}</span>}
+                                <span className="voucher-item-code">
+                                  {v.code}
+                                </span>
+                                {v.moTa && (
+                                  <span className="voucher-item-desc">
+                                    {v.moTa}
+                                  </span>
+                                )}
                               </div>
                             </div>
                             <div className="voucher-item-right">
-                              <span className="voucher-item-amount">-{(v.soTienGiam || 0).toLocaleString('vi-VN')}₫</span>
-                              {v.valid
-                                ? <span className="voucher-item-btn">Chọn</span>
-                                : <span className="voucher-item-invalid">Không hợp lệ</span>
-                              }
+                              <span className="voucher-item-amount">
+                                -{(v.soTienGiam || 0).toLocaleString("vi-VN")}₫
+                              </span>
+                              {v.valid ? (
+                                <span className="voucher-item-btn">Chọn</span>
+                              ) : (
+                                <span className="voucher-item-invalid">
+                                  Không hợp lệ
+                                </span>
+                              )}
                             </div>
                           </div>
                         ))}
@@ -365,24 +498,49 @@ const CheckoutPage: React.FC = () => {
 
           <div className="form-group">
             <label>Ghi chú (nếu có)</label>
-            <textarea 
+            <textarea
               placeholder="Ghi chú cho đơn hàng (màu sắc, size, yêu cầu đặc biệt...)"
-              value={note} 
-              onChange={e => setNote(e.target.value)}
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
               rows={3}
-              style={{ resize: 'vertical', fontFamily: 'inherit' }}
+              style={{ resize: "vertical", fontFamily: "inherit" }}
             />
+          </div>
+
+          <div className="form-group">
+            <label>Chọn tỉnh / thành giao hàng</label>
+            <select value={maTinh} onChange={(e) => setMaTinh(e.target.value)}>
+              <option value="">-- Chọn tỉnh/thành --</option>
+              {shippingRegions.map((r) => (
+                <option key={r.maTinh || r.code} value={r.maTinh || r.code}>
+                  {r.tenTinh || r.name} ({r.maTinh || r.code})
+                </option>
+              ))}
+            </select>
+            <small style={{ color: "#666" }}>
+              Vùng ảnh hưởng đến phí vận chuyển
+            </small>
           </div>
           <div className="form-group">
             <label>Phương thức thanh toán</label>
             <div className="payment-method-info">
-              <input type="text" value="Thanh toán khi nhận hàng (COD)" disabled />
-              <small style={{ color: '#666', marginTop: '4px', display: 'block' }}>
+              <input
+                type="text"
+                value="Thanh toán khi nhận hàng (COD)"
+                disabled
+              />
+              <small
+                style={{ color: "#666", marginTop: "4px", display: "block" }}
+              >
                 Bạn sẽ thanh toán bằng tiền mặt khi nhận hàng
               </small>
             </div>
           </div>
-          <button type="submit" className="btn-checkout" disabled={loading || cart.length === 0}>
+          <button
+            type="submit"
+            className="btn-checkout"
+            disabled={loading || cart.length === 0}
+          >
             {loading ? "Đang xử lý..." : "Xác nhận đặt hàng"}
           </button>
         </form>

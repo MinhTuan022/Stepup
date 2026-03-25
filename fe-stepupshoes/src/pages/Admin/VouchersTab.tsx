@@ -143,7 +143,7 @@ const VouchersTab = () => {
             setShowForm(true)
           }}
         >
-          ➕ Thêm voucher mới
+          Thêm voucher mới
         </button>
       </div>
 

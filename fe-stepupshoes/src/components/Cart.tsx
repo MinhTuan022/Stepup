@@ -86,6 +86,7 @@ const Cart = forwardRef<CartRef>((_props, ref) => {
   const selectedItems = cart.filter(i => !!selectedMap[i.maChiTiet]);
   const total = selectedItems.reduce((sum, item) => sum + (item.chiTietSanPham?.giaBan || 0) * item.soLuong, 0);
   const itemCount = selectedItems.reduce((sum, item) => sum + item.soLuong, 0);
+  const shipping = total > 10000000 ? 0 : 30000;
 
   return (
     <>
@@ -236,19 +237,22 @@ const Cart = forwardRef<CartRef>((_props, ref) => {
         {cart.length > 0 && (
           <div className="modern-cart-footer">
             <div className="cart-summary">
-              {/* <div className="summary-row">
+              <div className="summary-row">
                 <span>Tạm tính</span>
                 <span>{total.toLocaleString("vi-VN")}₫</span>
               </div>
-              <div className="summary-row shipping">
+              <div className="summary-row shipping-row">
                 <span>Phí vận chuyển</span>
-                <span className="free-badge">Miễn phí</span>
-              </div> */}
-              <div className="summary-divider" />
-              <div className="summary-row total-row">
-                <span>Tạm tính</span>
-                <span className="total-value">{total.toLocaleString("vi-VN")}₫</span>
+                <span>{shipping === 0 ? <span className="free-badge">Miễn phí</span> : `${shipping.toLocaleString('vi-VN')}₫`}</span>
               </div>
+              <div className="summary-divider" />
+                <div className="summary-row total-row">
+                  <span>Tổng</span>
+                  <span className="total-value">{(total + shipping).toLocaleString("vi-VN")}₫</span>
+                </div>
+                <div className="summary-note">
+                  <small>Miễn phí vận chuyển cho đơn hàng &gt; 10.000.000₫</small>
+                </div>
             </div>
 
             <button className="btn-checkout-modern" onClick={handleCheckout}>

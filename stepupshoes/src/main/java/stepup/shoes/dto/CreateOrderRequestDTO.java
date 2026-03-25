@@ -24,6 +24,8 @@ public class CreateOrderRequestDTO {
     
     private String diaChiGiaoHang;
     
+    private String maTinh;
+    
     private String ghiChu;
     
     private String maVoucher; // Mã voucher nếu có
