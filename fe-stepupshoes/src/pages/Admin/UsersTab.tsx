@@ -19,6 +19,8 @@ interface User {
 const UsersTab = () => {
   const { user: currentUser } = useAuth();
   const { showToast } = useToast();
+  const isAdmin = currentUser?.vaiTro === "quan_tri";
+  const isEmployee = currentUser?.vaiTro === "nhan_vien";
   const [users, setUsers] = useState<User[]>([]);
   const [filteredUsers, setFilteredUsers] = useState<User[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
@@ -67,8 +69,11 @@ const UsersTab = () => {
         filterStatus === "active" ? u.trangThai : !u.trangThai
       );
     }
+    if (isEmployee) {
+      result = result.filter((u) => u.vaiTro === "khach_hang");
+    }
     setFilteredUsers(result);
-  }, [users, searchTerm, filterRole, filterStatus]);
+  }, [users, searchTerm, filterRole, filterStatus, isEmployee]);
 
   const fetchUsers = async () => {
     try {
@@ -191,7 +196,7 @@ const UsersTab = () => {
           <h2>Quản lý người dùng</h2>
           <p>Tổng số người dùng: {totalUsers}</p>
         </div>
-        {currentUser?.vaiTro === "quan_tri" && (
+        {isAdmin && (
           <button
             className="btn-add-user"
             onClick={() => setShowAddModal(true)}
@@ -217,8 +222,8 @@ const UsersTab = () => {
         >
           <option value="">Tất cả vai trò</option>
           <option value="khach_hang">Khách hàng</option>
-          <option value="nhan_vien">Nhân viên</option>
-          <option value="quan_tri">Quản trị viên</option>
+          {isAdmin && <option value="nhan_vien">Nhân viên</option>}
+          {isAdmin && <option value="quan_tri">Quản trị viên</option>}
         </select>
         <select
           className="users-status-select"
@@ -275,12 +280,14 @@ const UsersTab = () => {
                       >
                         {user.trangThai ? "Khóa" : "Mở khóa"}
                       </button>
-                      <button
-                        className="btn-delete"
-                        onClick={() => handleDeleteUser(user.maNguoiDung)}
-                      >
-                        Xóa
-                      </button>
+                      {isAdmin && (
+                        <button
+                          className="btn-delete"
+                          onClick={() => handleDeleteUser(user.maNguoiDung)}
+                        >
+                          Xóa
+                        </button>
+                      )}
                     </>
                   )}
                 </td>
@@ -474,7 +481,7 @@ const UsersTab = () => {
                 />
               </div>
 
-              {editingUser.maNguoiDung !== currentUser?.maNguoiDung && (
+              {isAdmin && editingUser.maNguoiDung !== currentUser?.maNguoiDung && (
                 <div className="form-group">
                   <label>Vai trò:</label>
                   <select

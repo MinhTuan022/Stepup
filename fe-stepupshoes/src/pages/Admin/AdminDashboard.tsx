@@ -33,7 +33,7 @@ const AdminDashboard = () => {
   const location = useLocation()
 
   useEffect(() => {
-    if (isEmployee && !["counter-order", "orders", "products"].includes(activeTab)) {
+    if (isEmployee && !["counter-order", "orders", "products", "users"].includes(activeTab)) {
       setActiveTab("counter-order");
     }
   }, [user?.vaiTro, activeTab, isEmployee]);
@@ -71,7 +71,7 @@ const AdminDashboard = () => {
   const hasAccessToTab = (tab: TabType): boolean => {
     if (isAdmin) return true; 
     if (isEmployee) {
-      return ["counter-order", "orders", "products"].includes(tab);
+      return ["counter-order", "orders", "products", "users"].includes(tab);
     }
     return false;
   };
@@ -95,7 +95,7 @@ const AdminDashboard = () => {
       case "danhmuc":
         return <DanhMucTab />;
       case "products":
-        return <ProductsTab />;
+        return <ProductsTab readOnly={isEmployee} />;
       default:
         return <ProductsTab />;
     }

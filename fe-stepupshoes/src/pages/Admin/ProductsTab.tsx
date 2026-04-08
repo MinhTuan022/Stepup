@@ -55,9 +55,8 @@ const defaultForm: Partial<Product> = {
   trangThai: true,
   chiTietSanPhams: [{ ...defaultVariant }],
 };
-// ...existing code...
 
-const ProductsTab = () => {
+const ProductsTab = ({ readOnly = false }: { readOnly?: boolean }) => {
   const { showToast } = useToast();
   const [products, setProducts] = useState<Product[]>([]);
   const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
@@ -385,16 +384,18 @@ const ProductsTab = () => {
       {/* Page Header */}
       <div className="page-header">
         <h2>Quản lý sản phẩm</h2>
-        <button
-          className="btn-primary"
-          onClick={() => {
-            setShowModal(true);
-            setForm(defaultForm);
-            setEditId(null);
-          }}
-        >
-          Thêm sản phẩm
-        </button>
+        {!readOnly && (
+          <button
+            className="btn-primary"
+            onClick={() => {
+              setShowModal(true);
+              setForm(defaultForm);
+              setEditId(null);
+            }}
+          >
+            Thêm sản phẩm
+          </button>
+        )}
       </div>
 
       {/* Filters */}
@@ -927,7 +928,7 @@ const ProductsTab = () => {
                 <th>Danh mục</th>
                 <th>Biến thể</th>
                 <th>Trạng thái</th>
-                <th>Hành động</th>
+                {!readOnly && <th>Hành động</th>}
               </tr>
             </thead>
             <tbody>
@@ -1006,18 +1007,20 @@ const ProductsTab = () => {
                       {p.trangThai ? "Kinh doanh" : "Ngừng"}
                     </span>
                   </td>
-                  <td className="action-view">
-                    <button className="btn-edit" onClick={() => handleEdit(p)} title="Chỉnh sửa">
-                      Sửa
-                    </button>
-                    <button
-                      className={`btn-toggle ${p.trangThai ? 'active' : 'inactive'}`}
-                      onClick={() => handleToggleStatus(p)}
-                      title={p.trangThai ? 'Ngừng kinh doanh' : 'Bán lại'}
-                    >
-                      {p.trangThai ? 'Ngừng' : 'Kinh doanh'}
-                    </button>
-                  </td>
+                  {!readOnly && (
+                    <td className="action-view">
+                      <button className="btn-edit" onClick={() => handleEdit(p)} title="Chỉnh sửa">
+                        Sửa
+                      </button>
+                      <button
+                        className={`btn-toggle ${p.trangThai ? 'active' : 'inactive'}`}
+                        onClick={() => handleToggleStatus(p)}
+                        title={p.trangThai ? 'Ngừng kinh doanh' : 'Bán lại'}
+                      >
+                        {p.trangThai ? 'Ngừng' : 'Kinh doanh'}
+                      </button>
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
