@@ -30,6 +30,7 @@ const DanhMucTab = () => {
     maDanhMucCha: null,
     trangThai: true,
   });
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
     fetchDanhMucs();
@@ -125,6 +126,12 @@ const DanhMucTab = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    const errs: Record<string, string> = {};
+    if (!formData.tenDanhMuc?.trim()) errs.tenDanhMuc = "Vui lòng nhập tên danh mục";
+    setFormErrors(errs);
+    if (Object.keys(errs).length > 0) return;
+
     try {
       if (editingDanhMuc) {
         await adminService.updateCategory(editingDanhMuc.maDanhMuc, formData);
@@ -277,7 +284,7 @@ const DanhMucTab = () => {
             className="modal-overlay"
             onClick={() => setShowForm(false)}
           ></div>
-          <form className="danhmuc-form" onSubmit={handleSubmit}>
+          <form className="danhmuc-form" onSubmit={handleSubmit} noValidate>
             <h3>
               {editingDanhMuc ? "Cập nhật danh mục" : "Thêm danh mục"}
             </h3>
@@ -290,10 +297,11 @@ const DanhMucTab = () => {
                 id="tenDanhMuc"
                 name="tenDanhMuc"
                 value={formData.tenDanhMuc || ""}
-                onChange={handleInputChange}
+                onChange={(e) => { handleInputChange(e); setFormErrors(prev => ({ ...prev, tenDanhMuc: '' })); }}
                 placeholder="Nhập tên danh mục"
-                required
+                className={formErrors.tenDanhMuc ? "input-error" : ""}
               />
+              {formErrors.tenDanhMuc && <span className="field-error">{formErrors.tenDanhMuc}</span>}
             </div>
 
             <div className="form-group">

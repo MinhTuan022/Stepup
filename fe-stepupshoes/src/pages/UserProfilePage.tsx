@@ -76,6 +76,7 @@ const UserProfilePage: React.FC = () => {
     maTinh: '',
   });
   const [shippingRegions, setShippingRegions] = useState<Array<any>>([]);
+  const [profileErrors, setProfileErrors] = useState<Record<string, string>>({});
 
   const [passwordForm, setPasswordForm] = useState({
     oldPassword: '',
@@ -160,6 +161,19 @@ const UserProfilePage: React.FC = () => {
   const handleUpdateProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
+
+    const errs: Record<string, string> = {};
+    if (!editForm.hoTen.trim()) errs.hoTen = 'Vui lòng nhập họ tên';
+    if (!editForm.email.trim()) {
+      errs.email = 'Vui lòng nhập email';
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(editForm.email.trim())) {
+      errs.email = 'Email không hợp lệ';
+    }
+    if (editForm.soDienThoai && !/^(0[0-9]{9})$/.test(editForm.soDienThoai.trim())) {
+      errs.soDienThoai = 'Số điện thoại phải gồm 10 chữ số, bắt đầu bằng 0';
+    }
+    setProfileErrors(errs);
+    if (Object.keys(errs).length > 0) return;
 
     try {
       const payload = {
@@ -375,7 +389,7 @@ const UserProfilePage: React.FC = () => {
                   </button>
 
                   {showPasswordForm && (
-                    <form onSubmit={handlePasswordChange} className="password-form">
+                    <form onSubmit={handlePasswordChange} className="password-form" noValidate>
                       <h3>Đổi mật khẩu</h3>
                       <div className="form-group">
                         <label>Mật khẩu cũ:</label>
@@ -383,7 +397,6 @@ const UserProfilePage: React.FC = () => {
                           type="password"
                           value={passwordForm.oldPassword}
                           onChange={(e) => setPasswordForm({...passwordForm, oldPassword: e.target.value})}
-                          required
                         />
                       </div>
                       <div className="form-group">
@@ -392,7 +405,6 @@ const UserProfilePage: React.FC = () => {
                           type="password"
                           value={passwordForm.newPassword}
                           onChange={(e) => setPasswordForm({...passwordForm, newPassword: e.target.value})}
-                          required
                         />
                       </div>
                       <div className="form-group">
@@ -401,7 +413,6 @@ const UserProfilePage: React.FC = () => {
                           type="password"
                           value={passwordForm.confirmPassword}
                           onChange={(e) => setPasswordForm({...passwordForm, confirmPassword: e.target.value})}
-                          required
                         />
                       </div>
                       <button type="submit" className="btn-submit">Đổi mật khẩu</button>
@@ -409,32 +420,36 @@ const UserProfilePage: React.FC = () => {
                   )}
                 </div>
               ) : (
-                <form onSubmit={handleUpdateProfile} className="profile-form">
+                <form onSubmit={handleUpdateProfile} className="profile-form" noValidate>
                   <div className="form-group">
                     <label>Họ tên:</label>
                     <input
                       type="text"
                       value={editForm.hoTen}
-                      onChange={(e) => setEditForm({...editForm, hoTen: e.target.value})}
-                      required
+                      onChange={(e) => { setEditForm({...editForm, hoTen: e.target.value}); setProfileErrors(prev => ({ ...prev, hoTen: '' })); }}
+                      className={profileErrors.hoTen ? 'input-error' : ''}
                     />
+                    {profileErrors.hoTen && <span className="field-error">{profileErrors.hoTen}</span>}
                   </div>
                   <div className="form-group">
                     <label>Email:</label>
                     <input
                       type="email"
                       value={editForm.email}
-                      onChange={(e) => setEditForm({...editForm, email: e.target.value})}
-                      required
+                      onChange={(e) => { setEditForm({...editForm, email: e.target.value}); setProfileErrors(prev => ({ ...prev, email: '' })); }}
+                      className={profileErrors.email ? 'input-error' : ''}
                     />
+                    {profileErrors.email && <span className="field-error">{profileErrors.email}</span>}
                   </div>
                   <div className="form-group">
                     <label>Số điện thoại:</label>
                     <input
                       type="tel"
                       value={editForm.soDienThoai}
-                      onChange={(e) => setEditForm({...editForm, soDienThoai: e.target.value})}
+                      onChange={(e) => { setEditForm({...editForm, soDienThoai: e.target.value}); setProfileErrors(prev => ({ ...prev, soDienThoai: '' })); }}
+                      className={profileErrors.soDienThoai ? 'input-error' : ''}
                     />
+                    {profileErrors.soDienThoai && <span className="field-error">{profileErrors.soDienThoai}</span>}
                   </div>
                   <div className="form-group">
                     <label>Địa chỉ:</label>

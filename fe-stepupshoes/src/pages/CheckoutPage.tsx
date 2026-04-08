@@ -21,6 +21,7 @@ const CheckoutPage: React.FC = () => {
   const [maTinh, setMaTinh] = useState("");
   const [shippingRegions, setShippingRegions] = useState<Array<any>>([]);
   const [loading, setLoading] = useState(false);
+  const [formErrors, setFormErrors] = useState<{ name?: string; address?: string; phone?: string }>({});
   const [voucherInfo, setVoucherInfo] = useState<any>(null);
   const [checkingVoucher, setCheckingVoucher] = useState(false);
   const [availableVouchers, setAvailableVouchers] = useState<any[]>([]);
@@ -227,10 +228,16 @@ const CheckoutPage: React.FC = () => {
       return;
     }
 
-    if (!name.trim() || !address.trim() || !phone.trim()) {
-      showToast("Vui lòng điền đầy đủ thông tin giao hàng", "error");
-      return;
+    const errs: { name?: string; address?: string; phone?: string } = {};
+    if (!name.trim()) errs.name = "Vui lòng nhập họ tên";
+    if (!address.trim()) errs.address = "Vui lòng nhập địa chỉ nhận hàng";
+    if (!phone.trim()) {
+      errs.phone = "Vui lòng nhập số điện thoại";
+    } else if (!/^(0[0-9]{9})$/.test(phone.trim())) {
+      errs.phone = "Số điện thoại phải gồm 10 chữ số, bắt đầu bằng 0";
     }
+    setFormErrors(errs);
+    if (Object.keys(errs).length > 0) return;
 
     setLoading(true);
     try {
@@ -337,31 +344,34 @@ const CheckoutPage: React.FC = () => {
           </div>
         </div>
 
-        <form className="checkout-form" onSubmit={handleSubmit}>
+        <form className="checkout-form" onSubmit={handleSubmit} noValidate>
           <h3 className="checkout-subtitle">Thông tin nhận hàng</h3>
           <div className="form-group">
             <label>Họ tên</label>
             <input
               value={name}
-              onChange={(e) => setName(e.target.value)}
-              required
+              onChange={(e) => { setName(e.target.value); setFormErrors(prev => ({ ...prev, name: undefined })); }}
+              className={formErrors.name ? "input-error" : ""}
             />
+            {formErrors.name && <span className="field-error">{formErrors.name}</span>}
           </div>
           <div className="form-group">
             <label>Địa chỉ nhận hàng</label>
             <input
               value={address}
-              onChange={(e) => setAddress(e.target.value)}
-              required
+              onChange={(e) => { setAddress(e.target.value); setFormErrors(prev => ({ ...prev, address: undefined })); }}
+              className={formErrors.address ? "input-error" : ""}
             />
+            {formErrors.address && <span className="field-error">{formErrors.address}</span>}
           </div>
           <div className="form-group">
             <label>Số điện thoại</label>
             <input
               value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              required
+              onChange={(e) => { setPhone(e.target.value); setFormErrors(prev => ({ ...prev, phone: undefined })); }}
+              className={formErrors.phone ? "input-error" : ""}
             />
+            {formErrors.phone && <span className="field-error">{formErrors.phone}</span>}
           </div>
 
           {/* ─── VOUCHER SECTION ─── */}

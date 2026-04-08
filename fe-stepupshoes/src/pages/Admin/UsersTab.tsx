@@ -42,6 +42,7 @@ const UsersTab = () => {
     vaiTro: "khach_hang",
     matKhau: "",
   });
+  const [addUserErrors, setAddUserErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
     fetchUsers();
@@ -138,15 +139,24 @@ const UsersTab = () => {
   };
 
   const handleAddUser = async () => {
-    if (
-      !newUser.tenDangNhap ||
-      !newUser.hoTen ||
-      !newUser.email ||
-      !newUser.matKhau
-    ) {
-      showToast("Vui lòng điền đầy đủ thông tin", "warning");
-      return;
+    const errs: Record<string, string> = {};
+    if (!newUser.tenDangNhap?.trim()) errs.tenDangNhap = "Vui lòng nhập tên đăng nhập";
+    if (!newUser.hoTen?.trim()) errs.hoTen = "Vui lòng nhập họ tên";
+    if (!newUser.email?.trim()) {
+      errs.email = "Vui lòng nhập email";
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newUser.email!.trim())) {
+      errs.email = "Email không hợp lệ";
     }
+    if (!newUser.matKhau) {
+      errs.matKhau = "Vui lòng nhập mật khẩu";
+    } else if (newUser.matKhau!.length < 6) {
+      errs.matKhau = "Mật khẩu tối thiểu 6 ký tự";
+    }
+    if (newUser.soDienThoai && !/^(0[0-9]{9})$/.test(newUser.soDienThoai.trim())) {
+      errs.soDienThoai = "Số điện thoại phải gồm 10 chữ số, bắt đầu bằng 0";
+    }
+    setAddUserErrors(errs);
+    if (Object.keys(errs).length > 0) return;
     try {
       await adminService.createUser(newUser as User);
       showToast("Tạo tài khoản thành công", "success");
@@ -316,55 +326,55 @@ const UsersTab = () => {
                 <input
                   type="text"
                   value={newUser.tenDangNhap || ""}
-                  onChange={(e) =>
-                    setNewUser({ ...newUser, tenDangNhap: e.target.value })
-                  }
+                  onChange={(e) => { setNewUser({ ...newUser, tenDangNhap: e.target.value }); setAddUserErrors(prev => ({ ...prev, tenDangNhap: '' })); }}
                   placeholder="Nhập tên đăng nhập"
+                  className={addUserErrors.tenDangNhap ? "input-error" : ""}
                 />
+                {addUserErrors.tenDangNhap && <span className="field-error">{addUserErrors.tenDangNhap}</span>}
               </div>
               <div className="form-group">
                 <label>Mật khẩu:</label>
                 <input
                   type="password"
                   value={newUser.matKhau || ""}
-                  onChange={(e) =>
-                    setNewUser({ ...newUser, matKhau: e.target.value })
-                  }
+                  onChange={(e) => { setNewUser({ ...newUser, matKhau: e.target.value }); setAddUserErrors(prev => ({ ...prev, matKhau: '' })); }}
                   placeholder="Nhập mật khẩu"
+                  className={addUserErrors.matKhau ? "input-error" : ""}
                 />
+                {addUserErrors.matKhau && <span className="field-error">{addUserErrors.matKhau}</span>}
               </div>
               <div className="form-group">
                 <label>Họ tên:</label>
                 <input
                   type="text"
                   value={newUser.hoTen || ""}
-                  onChange={(e) =>
-                    setNewUser({ ...newUser, hoTen: e.target.value })
-                  }
+                  onChange={(e) => { setNewUser({ ...newUser, hoTen: e.target.value }); setAddUserErrors(prev => ({ ...prev, hoTen: '' })); }}
                   placeholder="Nhập họ tên"
+                  className={addUserErrors.hoTen ? "input-error" : ""}
                 />
+                {addUserErrors.hoTen && <span className="field-error">{addUserErrors.hoTen}</span>}
               </div>
               <div className="form-group">
                 <label>Email:</label>
                 <input
                   type="email"
                   value={newUser.email || ""}
-                  onChange={(e) =>
-                    setNewUser({ ...newUser, email: e.target.value })
-                  }
+                  onChange={(e) => { setNewUser({ ...newUser, email: e.target.value }); setAddUserErrors(prev => ({ ...prev, email: '' })); }}
                   placeholder="Nhập email"
+                  className={addUserErrors.email ? "input-error" : ""}
                 />
+                {addUserErrors.email && <span className="field-error">{addUserErrors.email}</span>}
               </div>
               <div className="form-group">
                 <label>Điện thoại:</label>
                 <input
                   type="text"
                   value={newUser.soDienThoai || ""}
-                  onChange={(e) =>
-                    setNewUser({ ...newUser, soDienThoai: e.target.value })
-                  }
+                  onChange={(e) => { setNewUser({ ...newUser, soDienThoai: e.target.value }); setAddUserErrors(prev => ({ ...prev, soDienThoai: '' })); }}
                   placeholder="Nhập số điện thoại"
+                  className={addUserErrors.soDienThoai ? "input-error" : ""}
                 />
+                {addUserErrors.soDienThoai && <span className="field-error">{addUserErrors.soDienThoai}</span>}
               </div>
               <div className="form-group">
                 <label>Địa chỉ:</label>

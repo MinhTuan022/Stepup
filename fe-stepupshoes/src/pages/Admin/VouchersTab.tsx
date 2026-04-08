@@ -40,6 +40,7 @@ const VouchersTab = () => {
     ngayKetThuc: '',
     soLuong: 0,
   })
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({})
 
   useEffect(() => {
     fetchVouchers()
@@ -76,6 +77,19 @@ const VouchersTab = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+
+    const errs: Record<string, string> = {}
+    if (!formData.code?.trim()) errs.code = 'Vui lòng nhập mã voucher'
+    if (!formData.giaTriGiam || formData.giaTriGiam <= 0) errs.giaTriGiam = 'Giá trị giảm phải lớn hơn 0'
+    if (formData.soLuong !== undefined && formData.soLuong < 0) errs.soLuong = 'Số lượng không được âm'
+    if (!formData.ngayBatDau) errs.ngayBatDau = 'Vui lòng chọn ngày bắt đầu'
+    if (!formData.ngayKetThuc) errs.ngayKetThuc = 'Vui lòng chọn ngày kết thúc'
+    if (formData.ngayBatDau && formData.ngayKetThuc && new Date(formData.ngayKetThuc) <= new Date(formData.ngayBatDau)) {
+      errs.ngayKetThuc = 'Ngày kết thúc phải sau ngày bắt đầu'
+    }
+    setFormErrors(errs)
+    if (Object.keys(errs).length > 0) return
+
     try {
       if (editingVoucher) {
         await adminService.updateVoucher(editingVoucher.maVoucher, formData)
@@ -213,22 +227,22 @@ const VouchersTab = () => {
                 ✕
               </button>
             </div>
-            <form onSubmit={handleSubmit}>
+            <form onSubmit={handleSubmit} noValidate>
               <div className="modal-body">
                 <div className="form-group">
                   <label>Mã voucher:</label>
                   <input
                     type="text"
-                    required
                     value={formData.code || ''}
-                    onChange={(e) => setFormData({ ...formData, code: e.target.value })}
+                    onChange={(e) => { setFormData({ ...formData, code: e.target.value }); setFormErrors(prev => ({ ...prev, code: '' })); }}
+                    className={formErrors.code ? 'input-error' : ''}
                   />
+                  {formErrors.code && <span className="field-error">{formErrors.code}</span>}
                 </div>
                 <div className="form-group">
                   <label>Mô tả:</label>
                   <input
                     type="text"
-                    required
                     value={formData.moTa || ''}
                     onChange={(e) => setFormData({ ...formData, moTa: e.target.value })}
                   />
@@ -238,10 +252,11 @@ const VouchersTab = () => {
                     <label>Giá trị giảm:</label>
                     <input
                       type="number"
-                      required
-                      value={formData.giaTriGiam || 0}
-                      onChange={(e) => setFormData({ ...formData, giaTriGiam: parseFloat(e.target.value) })}
+                      value={formData.giaTriGiam ?? ''}
+                      onChange={(e) => { setFormData({ ...formData, giaTriGiam: e.target.value === '' ? undefined : parseFloat(e.target.value) }); setFormErrors(prev => ({ ...prev, giaTriGiam: '' })); }}
+                      className={formErrors.giaTriGiam ? 'input-error' : ''}
                     />
+                    {formErrors.giaTriGiam && <span className="field-error">{formErrors.giaTriGiam}</span>}
                   </div>
                   <div className="form-group">
                     <label>Loại giảm:</label>
@@ -258,17 +273,16 @@ const VouchersTab = () => {
                   <label>Giá trị tối thiểu:</label>
                   <input
                     type="number"
-                    required
-                    value={formData.giaTriToiThieu || 0}
-                    onChange={(e) => setFormData({ ...formData, giaTriToiThieu: parseFloat(e.target.value) })}
+                    value={formData.giaTriToiThieu ?? ''}
+                    onChange={(e) => setFormData({ ...formData, giaTriToiThieu: e.target.value === '' ? undefined : parseFloat(e.target.value) })}
                   />
                 </div>
                 <div className="form-group">
                   <label>Giảm tối đa (nếu là %):</label>
                   <input
                     type="number"
-                    value={formData.giamToiDa || 0}
-                    onChange={(e) => setFormData({ ...formData, giamToiDa: parseFloat(e.target.value) })}
+                    value={formData.giamToiDa ?? ''}
+                    onChange={(e) => setFormData({ ...formData, giamToiDa: e.target.value === '' ? undefined : parseFloat(e.target.value) })}
                   />
                 </div>
                 <div className="form-row">
@@ -276,29 +290,32 @@ const VouchersTab = () => {
                     <label>Ngày bắt đầu:</label>
                     <input
                       type="datetime-local"
-                      required
                       value={formData.ngayBatDau || ''}
-                      onChange={(e) => setFormData({ ...formData, ngayBatDau: e.target.value })}
+                      onChange={(e) => { setFormData({ ...formData, ngayBatDau: e.target.value }); setFormErrors(prev => ({ ...prev, ngayBatDau: '' })); }}
+                      className={formErrors.ngayBatDau ? 'input-error' : ''}
                     />
+                    {formErrors.ngayBatDau && <span className="field-error">{formErrors.ngayBatDau}</span>}
                   </div>
                   <div className="form-group">
                     <label>Ngày kết thúc:</label>
                     <input
                       type="datetime-local"
-                      required
                       value={formData.ngayKetThuc || ''}
-                      onChange={(e) => setFormData({ ...formData, ngayKetThuc: e.target.value })}
+                      onChange={(e) => { setFormData({ ...formData, ngayKetThuc: e.target.value }); setFormErrors(prev => ({ ...prev, ngayKetThuc: '' })); }}
+                      className={formErrors.ngayKetThuc ? 'input-error' : ''}
                     />
+                    {formErrors.ngayKetThuc && <span className="field-error">{formErrors.ngayKetThuc}</span>}
                   </div>
                 </div>
                 <div className="form-group">
                   <label>Số lượng:</label>
                   <input
                     type="number"
-                    required
-                    value={formData.soLuong || 0}
-                    onChange={(e) => setFormData({ ...formData, soLuong: parseInt(e.target.value) })}
+                    value={formData.soLuong ?? ''}
+                    onChange={(e) => { setFormData({ ...formData, soLuong: e.target.value === '' ? undefined : parseInt(e.target.value) }); setFormErrors(prev => ({ ...prev, soLuong: '' })); }}
+                    className={formErrors.soLuong ? 'input-error' : ''}
                   />
+                  {formErrors.soLuong && <span className="field-error">{formErrors.soLuong}</span>}
                 </div>
               </div>
               <div className="modal-footer">

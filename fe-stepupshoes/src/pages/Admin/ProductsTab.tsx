@@ -77,6 +77,7 @@ const ProductsTab = () => {
   const [imageInputs, setImageInputs] = useState<string[]>([]);
   const [imageFiles, setImageFiles] = useState<(File | null)[]>([]);
   const [removedVariantIds, setRemovedVariantIds] = useState<number[]>([]);
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
     if (showModal && form.chiTietSanPhams && form.chiTietSanPhams[variantIndex]?.hinhAnhs) {
@@ -200,32 +201,30 @@ const ProductsTab = () => {
       const variants = prev.chiTietSanPhams ? [...prev.chiTietSanPhams] : [{ ...defaultVariant }];
       variants[variantIndex] = {
         ...variants[variantIndex],
-        [name]: type === "checkbox" ? checked : type === "number" ? Number(value) : value,
+        [name]: type === "checkbox" ? checked : type === "number" ? (value === '' ? undefined : Number(value)) : value,
       };
       return { ...prev, chiTietSanPhams: variants };
     });
   };
 
   const validateForm = (): boolean => {
-    if (!form.tenSanPham?.trim()) {
-      showToast("Vui lòng nhập tên sản phẩm", "warning");
-      return false;
-    }
+    const errs: Record<string, string> = {};
+    if (!form.tenSanPham?.trim()) errs.tenSanPham = "Vui lòng nhập tên sản phẩm";
+    if (form.giaCoBan !== undefined && form.giaCoBan < 0) errs.giaCoBan = "Giá cơ bản không được âm";
     if (!form.chiTietSanPhams || form.chiTietSanPhams.length === 0) {
       showToast("Vui lòng thêm ít nhất một biến thể sản phẩm", "warning");
+      setFormErrors(errs);
       return false;
     }
-    for (const v of form.chiTietSanPhams) {
-      if (!v.maSKU?.trim()) {
-        showToast("Vui lòng nhập SKU cho tất cả biến thể", "warning");
-        return false;
-      }
-      if (!v.mauSac?.trim() || !v.size?.trim()) {
-        showToast("Vui lòng nhập đầy đủ màu sắc và size cho tất cả biến thể", "warning");
-        return false;
-      }
+    for (let i = 0; i < form.chiTietSanPhams.length; i++) {
+      const v = form.chiTietSanPhams[i];
+      if (!v.maSKU?.trim()) errs[`variant_${i}_maSKU`] = "Vui lòng nhập SKU";
+      if (!v.mauSac?.trim()) errs[`variant_${i}_mauSac`] = "Vui lòng nhập màu sắc";
+      if (!v.size?.trim()) errs[`variant_${i}_size`] = "Vui lòng nhập size";
+      if (v.giaBan < 0) errs[`variant_${i}_giaBan`] = "Giá bán không được âm";
     }
-    return true;
+    setFormErrors(errs);
+    return Object.keys(errs).length === 0;
   };
 
   const handleSubmitProduct = async () => {
@@ -466,6 +465,7 @@ const ProductsTab = () => {
             <form
               className="product-form-improved"
               onSubmit={handleSubmit}
+              noValidate
               onKeyDown={(e) => {
                 if (e.key === "Enter" && currentStep < 2) e.preventDefault();
               }}
@@ -478,10 +478,11 @@ const ProductsTab = () => {
                     <input
                       name="tenSanPham"
                       value={form.tenSanPham || ""}
-                      onChange={handleInputChange}
+                      onChange={(e) => { handleInputChange(e); setFormErrors(prev => ({ ...prev, tenSanPham: '' })); }}
                       placeholder="Nhập tên sản phẩm"
-                      required
+                      className={formErrors.tenSanPham ? "input-error" : ""}
                     />
+                    {formErrors.tenSanPham && <span className="field-error">{formErrors.tenSanPham}</span>}
                   </div>
                   <div className="form-group">
                     <label>Mô tả</label>
@@ -509,7 +510,6 @@ const ProductsTab = () => {
                         name="maDanhMuc"
                         value={form.maDanhMuc || ""}
                         onChange={handleInputChange}
-                        required
                       >
                         <option value="">Chọn danh mục</option>
                         {categories.map((cat) => (
@@ -526,11 +526,13 @@ const ProductsTab = () => {
                       <input
                         name="giaCoBan"
                         type="number"
-                        value={form.giaCoBan || 0}
-                        onChange={handleInputChange}
+                        value={form.giaCoBan ?? ''}
+                        onChange={(e) => { handleInputChange(e); setFormErrors(prev => ({ ...prev, giaCoBan: '' })); }}
                         placeholder="0"
                         min="0"
+                        className={formErrors.giaCoBan ? "input-error" : ""}
                       />
+                      {formErrors.giaCoBan && <span className="field-error">{formErrors.giaCoBan}</span>}
                     </div>
                     <div className="form-group">
                       <label className="checkbox-label">
@@ -648,30 +650,33 @@ const ProductsTab = () => {
                         <input
                           name="maSKU"
                           value={form.chiTietSanPhams?.[variantIndex]?.maSKU || ""}
-                          onChange={handleDetailChange}
+                          onChange={(e) => { handleDetailChange(e); setFormErrors(prev => ({ ...prev, [`variant_${variantIndex}_maSKU`]: '' })); }}
                           placeholder="VD: SP001-RED-M"
-                          required
+                          className={formErrors[`variant_${variantIndex}_maSKU`] ? "input-error" : ""}
                         />
+                        {formErrors[`variant_${variantIndex}_maSKU`] && <span className="field-error">{formErrors[`variant_${variantIndex}_maSKU`]}</span>}
                       </div>
                       <div className="form-group">
                         <label>Màu sắc <span className="required">*</span></label>
                         <input
                           name="mauSac"
                           value={form.chiTietSanPhams?.[variantIndex]?.mauSac || ""}
-                          onChange={handleDetailChange}
+                          onChange={(e) => { handleDetailChange(e); setFormErrors(prev => ({ ...prev, [`variant_${variantIndex}_mauSac`]: '' })); }}
                           placeholder="VD: Đỏ"
-                          required
+                          className={formErrors[`variant_${variantIndex}_mauSac`] ? "input-error" : ""}
                         />
+                        {formErrors[`variant_${variantIndex}_mauSac`] && <span className="field-error">{formErrors[`variant_${variantIndex}_mauSac`]}</span>}
                       </div>
                       <div className="form-group">
                         <label>Size <span className="required">*</span></label>
                         <input
                           name="size"
                           value={form.chiTietSanPhams?.[variantIndex]?.size || ""}
-                          onChange={handleDetailChange}
+                          onChange={(e) => { handleDetailChange(e); setFormErrors(prev => ({ ...prev, [`variant_${variantIndex}_size`]: '' })); }}
                           placeholder="VD: M, L, XL"
-                          required
+                          className={formErrors[`variant_${variantIndex}_size`] ? "input-error" : ""}
                         />
+                        {formErrors[`variant_${variantIndex}_size`] && <span className="field-error">{formErrors[`variant_${variantIndex}_size`]}</span>}
                       </div>
                     </div>
 
@@ -681,19 +686,20 @@ const ProductsTab = () => {
                         <input
                           name="giaBan"
                           type="number"
-                          value={form.chiTietSanPhams?.[variantIndex]?.giaBan || 0}
-                          onChange={handleDetailChange}
+                          value={form.chiTietSanPhams?.[variantIndex]?.giaBan ?? ''}
+                          onChange={(e) => { handleDetailChange(e); setFormErrors(prev => ({ ...prev, [`variant_${variantIndex}_giaBan`]: '' })); }}
                           placeholder="0"
                           min="0"
-                          required
+                          className={formErrors[`variant_${variantIndex}_giaBan`] ? "input-error" : ""}
                         />
+                        {formErrors[`variant_${variantIndex}_giaBan`] && <span className="field-error">{formErrors[`variant_${variantIndex}_giaBan`]}</span>}
                       </div>
                       <div className="form-group">
                         <label>Số lượng tồn</label>
                         <input
                           name="soLuongTon"
                           type="number"
-                          value={form.chiTietSanPhams?.[variantIndex]?.soLuongTon || 0}
+                          value={form.chiTietSanPhams?.[variantIndex]?.soLuongTon ?? ''}
                           onChange={handleDetailChange}
                           placeholder="0"
                           min="0"

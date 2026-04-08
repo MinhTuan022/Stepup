@@ -33,3 +33,14 @@ body {
   height: 100%;
 
 }
+
+.field-error {
+  color: #d32f2f;
+  font-size: 0.82rem;
+  margin-top: 0.2rem;
+  display: block;
+}
+
+.input-error {
+  border-color: #d32f2f !important;
+}

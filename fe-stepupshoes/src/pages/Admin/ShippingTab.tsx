@@ -22,6 +22,7 @@ const ShippingTab = () => {
     tenTinh: "",
     phi: 0,
   });
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
 
   const { showToast } = useToast();
 
@@ -63,10 +64,11 @@ const ShippingTab = () => {
 
   const handleSubmit = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    if (!formData.maTinh || !formData.tenTinh) {
-      setError("Vui lòng nhập mã và tên tỉnh");
-      return;
-    }
+    const errs: Record<string, string> = {};
+    if (!formData.maTinh?.trim()) errs.maTinh = "Vui lòng nhập mã tỉnh";
+    if (!formData.tenTinh?.trim()) errs.tenTinh = "Vui lòng nhập tên tỉnh";
+    setFormErrors(errs);
+    if (Object.keys(errs).length > 0) return;
     setError(null);
     try {
       if (editingRegion) {
@@ -157,33 +159,35 @@ const ShippingTab = () => {
               <h3>{editingRegion ? "Chỉnh sửa vùng" : "Tạo vùng mới"}</h3>
               <button className="close-btn" onClick={cancelForm}>✕</button>
             </div>
-            <form onSubmit={handleSubmit}>
+            <form onSubmit={handleSubmit} noValidate>
               <div className="modal-body">
                 <div className="form-group">
                   <label>Mã tỉnh (maTinh):</label>
                   <input
                     type="text"
-                    required
                     value={formData.maTinh || ""}
-                    onChange={(e) => setFormData({ ...formData, maTinh: e.target.value })}
+                    onChange={(e) => { setFormData({ ...formData, maTinh: e.target.value }); setFormErrors(prev => ({ ...prev, maTinh: '' })); }}
                     disabled={!!editingRegion}
+                    className={formErrors.maTinh ? "input-error" : ""}
                   />
+                  {formErrors.maTinh && <span className="field-error">{formErrors.maTinh}</span>}
                 </div>
                 <div className="form-group">
                   <label>Tên tỉnh (tenTinh):</label>
                   <input
                     type="text"
-                    required
                     value={formData.tenTinh || ""}
-                    onChange={(e) => setFormData({ ...formData, tenTinh: e.target.value })}
+                    onChange={(e) => { setFormData({ ...formData, tenTinh: e.target.value }); setFormErrors(prev => ({ ...prev, tenTinh: '' })); }}
+                    className={formErrors.tenTinh ? "input-error" : ""}
                   />
+                  {formErrors.tenTinh && <span className="field-error">{formErrors.tenTinh}</span>}
                 </div>
                 <div className="form-group">
                   <label>Phí (phi):</label>
                   <input
                     type="number"
-                    value={formData.phi || 0}
-                    onChange={(e) => setFormData({ ...formData, phi: Number(e.target.value) })}
+                    value={formData.phi ?? ''}
+                    onChange={(e) => setFormData({ ...formData, phi: e.target.value === '' ? undefined : Number(e.target.value) })}
                   />
                 </div>
                 <div className="form-row">
