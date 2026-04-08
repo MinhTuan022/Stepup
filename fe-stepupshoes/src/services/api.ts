@@ -243,26 +243,26 @@ export const userService = {
     const data: ApiResponse<any[]> = await response.json();
     return data.data;
   },
-    createShippingRegion: async (region: { maTinh: string; tenTinh: string; phi?: number; loai?: string; vungCha?: string; moTa?: string }) => {
+    createShippingRegion: async (region: { maTinh: string; tenTinh: string; phi?: number; loai?: string; moTa?: string }) => {
       const response = await fetch(`${API_BASE_URL}/v1/shipping-regions`, {
         method: 'POST',
         headers: getHeaders(),
         body: JSON.stringify(region),
       });
       if (!response.ok) {
-        throw new Error('Failed to create shipping region');
+        throw new Error('Lỗi khi tạo vùng giao hàng');
       }
       const data: ApiResponse<any> = await response.json();
       return data.data;
     },
-    updateShippingRegion: async (maTinh: string, region: { tenTinh?: string; phi?: number; loai?: string; vungCha?: string; moTa?: string }) => {
+    updateShippingRegion: async (maTinh: string, region: { tenTinh?: string; phi?: number; loai?: string; moTa?: string }) => {
       const response = await fetch(`${API_BASE_URL}/v1/shipping-regions/${encodeURIComponent(maTinh)}`, {
         method: 'PUT',
         headers: getHeaders(),
         body: JSON.stringify(region),
       });
       if (!response.ok) {
-        throw new Error('Failed to update shipping region');
+        throw new Error('Lỗi khi cập nhật vùng giao hàng');
       }
       const data: ApiResponse<any> = await response.json();
       return data.data;
@@ -273,7 +273,7 @@ export const userService = {
         headers: getHeaders(),
       });
       if (!response.ok) {
-        throw new Error('Failed to delete shipping region');
+        throw new Error('Lỗi khi xóa vùng giao hàng');
       }
       const data: ApiResponse<any> = await response.json();
       return data.data;
@@ -300,7 +300,7 @@ export const adminService = {
     const response = await fetch(`${API_BASE_URL}/v1/admin/statistics/overview`, {
       headers: getHeaders(),
     })
-    if (!response.ok) throw new Error('Failed to fetch statistics')
+    if (!response.ok) throw new Error('Lỗi khi tải thống kê tổng quan')
     const data: ApiResponse<any> = await response.json()
     return data.data
   },
@@ -310,7 +310,7 @@ export const adminService = {
       `${API_BASE_URL}/v1/admin/statistics/revenue?fromDate=${fromDate}&toDate=${toDate}`,
       { headers: getHeaders() }
     )
-    if (!response.ok) throw new Error('Failed to fetch revenue stats')
+    if (!response.ok) throw new Error('Lỗi khi tải thống kê doanh thu')
     const data: ApiResponse<any> = await response.json()
     return data.data
   },
@@ -320,7 +320,7 @@ export const adminService = {
     if (fromDate) url += `&fromDate=${fromDate}`;
     if (toDate) url += `&toDate=${toDate}`;
     const response = await fetch(url, { headers: getHeaders() })
-    if (!response.ok) throw new Error('Failed to fetch top products')
+    if (!response.ok) throw new Error('Lỗi khi tải sản phẩm bán chạy')
     const data: ApiResponse<any> = await response.json()
     return data.data
   },
@@ -373,7 +373,7 @@ export const adminService = {
       `${API_BASE_URL}/v1/admin/users?page=${page}&size=${size}`,
       { headers: getHeaders() }
     )
-    if (!response.ok) throw new Error('Failed to fetch users')
+    if (!response.ok) throw new Error('Lỗi khi tải danh sách người dùng')
     const data: ApiResponse<any> = await response.json()
     return data.data
   },
@@ -382,7 +382,7 @@ export const adminService = {
     const response = await fetch(`${API_BASE_URL}/v1/admin/users/${id}`, {
       headers: getHeaders(),
     })
-    if (!response.ok) throw new Error('Failed to fetch user')
+    if (!response.ok) throw new Error('Lỗi khi tải thông tin người dùng')
     const data: ApiResponse<any> = await response.json()
     return data.data
   },
@@ -393,7 +393,7 @@ export const adminService = {
       headers: getHeaders(),
       body: JSON.stringify(userData),
     })
-    if (!response.ok) throw new Error('Failed to create user')
+    if (!response.ok) throw new Error('Lỗi khi tạo tài khoản')
     const data: ApiResponse<any> = await response.json()
     return data.data
   },
@@ -404,7 +404,7 @@ export const adminService = {
       headers: getHeaders(),
       body: JSON.stringify(userData),
     })
-    if (!response.ok) throw new Error('Failed to update user')
+    if (!response.ok) throw new Error('Lỗi khi cập nhật người dùng')
     const data: ApiResponse<any> = await response.json()
     return data.data
   },
@@ -414,7 +414,7 @@ export const adminService = {
       method: 'PUT',
       headers: getHeaders(),
     })
-    if (!response.ok) throw new Error('Failed to lock user')
+    if (!response.ok) throw new Error('Lỗi khi khóa tài khoản')
     const data: ApiResponse<any> = await response.json()
     return data.data
   },
@@ -424,7 +424,7 @@ export const adminService = {
       method: 'DELETE',
       headers: getHeaders(),
     })
-    if (!response.ok) throw new Error('Failed to delete user')
+    if (!response.ok) throw new Error('Lỗi khi xóa tài khoản')
     const data: ApiResponse<any> = await response.json()
     return data.data
   },
@@ -438,7 +438,7 @@ export const adminService = {
     if (status) url.searchParams.append('status', status)
 
     const response = await fetch(url.toString(), { headers: getHeaders() })
-    if (!response.ok) throw new Error('Failed to fetch orders')
+    if (!response.ok) throw new Error('Lỗi khi tải danh sách đơn hàng')
     const data: ApiResponse<any> = await response.json()
     return data.data
   },
@@ -447,7 +447,7 @@ export const adminService = {
     const response = await fetch(`${API_BASE_URL}/v1/admin/orders/${id}`, {
       headers: getHeaders(),
     })
-    if (!response.ok) throw new Error('Failed to fetch order')
+    if (!response.ok) throw new Error('Lỗi khi tải chi tiết đơn hàng')
     const data: ApiResponse<any> = await response.json()
     return data.data
   },
@@ -460,7 +460,7 @@ export const adminService = {
         headers: getHeaders(),
       }
     )
-    if (!response.ok) throw new Error('Failed to update order status')
+    if (!response.ok) throw new Error('Lỗi khi cập nhật trạng thái đơn hàng')
     const data: ApiResponse<any> = await response.json()
     return data.data
   },
@@ -471,7 +471,7 @@ export const adminService = {
       headers: getHeaders(),
       body: JSON.stringify(orderData),
     })
-    if (!response.ok) throw new Error('Failed to update order')
+    if (!response.ok) throw new Error('Lỗi khi cập nhật đơn hàng')
     const data: ApiResponse<any> = await response.json()
     return data.data
   },
@@ -481,7 +481,7 @@ export const adminService = {
       method: 'DELETE',
       headers: getHeaders(),
     })
-    if (!response.ok) throw new Error('Failed to delete order')
+    if (!response.ok) throw new Error('Lỗi khi xóa đơn hàng')
     const data: ApiResponse<any> = await response.json()
     return data.data
   },
@@ -492,7 +492,7 @@ export const adminService = {
       `${API_BASE_URL}/v1/admin/vouchers?page=${page}&size=${size}`,
       { headers: getHeaders() }
     )
-    if (!response.ok) throw new Error('Failed to fetch vouchers')
+    if (!response.ok) throw new Error('Lỗi khi tải danh sách voucher')
     const data: ApiResponse<any> = await response.json()
     return data.data
   },
@@ -501,7 +501,7 @@ export const adminService = {
     const response = await fetch(`${API_BASE_URL}/v1/admin/vouchers/${id}`, {
       headers: getHeaders(),
     })
-    if (!response.ok) throw new Error('Failed to fetch voucher')
+    if (!response.ok) throw new Error('Lỗi khi tải thông tin voucher')
     const data: ApiResponse<any> = await response.json()
     return data.data
   },
@@ -512,7 +512,7 @@ export const adminService = {
       headers: getHeaders(),
       body: JSON.stringify(voucherData),
     })
-    if (!response.ok) throw new Error('Failed to create voucher')
+    if (!response.ok) throw new Error('Lỗi khi tạo voucher')
     const data: ApiResponse<any> = await response.json()
     return data.data
   },
@@ -523,7 +523,7 @@ export const adminService = {
       headers: getHeaders(),
       body: JSON.stringify(voucherData),
     })
-    if (!response.ok) throw new Error('Failed to update voucher')
+    if (!response.ok) throw new Error('Lỗi khi cập nhật voucher')
     const data: ApiResponse<any> = await response.json()
     return data.data
   },
@@ -533,7 +533,7 @@ export const adminService = {
       method: 'DELETE',
       headers: getHeaders(),
     })
-    if (!response.ok) throw new Error('Failed to delete voucher')
+    if (!response.ok) throw new Error('Lỗi khi xóa voucher')
     const data: ApiResponse<any> = await response.json()
     return data.data
   },
@@ -546,7 +546,7 @@ export const adminService = {
     if (status !== undefined) url.searchParams.append('status', status.toString())
 
     const response = await fetch(url.toString(), { headers: getHeaders() })
-    if (!response.ok) throw new Error('Failed to fetch reviews')
+    if (!response.ok) throw new Error('Lỗi khi tải danh sách đánh giá')
     const data: ApiResponse<any> = await response.json()
     return data.data
   },
@@ -556,7 +556,7 @@ export const adminService = {
       method: 'PUT',
       headers: getHeaders(),
     })
-    if (!response.ok) throw new Error('Failed to approve review')
+    if (!response.ok) throw new Error('Lỗi khi duyệt đánh giá')
     const data: ApiResponse<any> = await response.json()
     return data.data
   },
@@ -566,7 +566,7 @@ export const adminService = {
       method: 'PUT',
       headers: getHeaders(),
     })
-    if (!response.ok) throw new Error('Failed to reject review')
+    if (!response.ok) throw new Error('Lỗi khi từ chối đánh giá')
     const data: ApiResponse<any> = await response.json()
     return data.data
   },
@@ -576,7 +576,7 @@ export const adminService = {
       method: 'DELETE',
       headers: getHeaders(),
     })
-    if (!response.ok) throw new Error('Failed to delete review')
+    if (!response.ok) throw new Error('Lỗi khi xóa đánh giá')
     const data: ApiResponse<any> = await response.json()
     return data.data
   },
@@ -595,7 +595,7 @@ export const adminService = {
     })
     if (!response.ok) {
       const error = await response.json()
-      throw new Error(error.message || 'Failed to create counter order')
+      throw new Error(error.message || 'Lỗi khi tạo đơn hàng tại quầy')
     }
     const data: ApiResponse<any> = await response.json()
     return data.data
@@ -609,7 +609,7 @@ export const adminService = {
     })
     if (!response.ok) {
       const error = await response.json()
-      throw new Error(error.message || 'Failed to add item to order')
+      throw new Error(error.message || 'Lỗi khi thêm sản phẩm vào đơn hàng')
     }
     const data: ApiResponse<any> = await response.json()
     return data.data
@@ -622,7 +622,7 @@ export const adminService = {
     })
     if (!response.ok) {
       const error = await response.json()
-      throw new Error(error.message || 'Failed to remove item from order')
+      throw new Error(error.message || 'Lỗi khi xóa sản phẩm khỏi đơn hàng')
     }
     const data: ApiResponse<any> = await response.json()
     return data.data
@@ -638,7 +638,7 @@ export const adminService = {
     )
     if (!response.ok) {
       const error = await response.json()
-      throw new Error(error.message || 'Failed to apply voucher')
+      throw new Error(error.message || 'Lỗi khi áp dụng voucher')
     }
     const data: ApiResponse<any> = await response.json()
     return data.data
@@ -654,7 +654,7 @@ export const adminService = {
     )
     if (!response.ok) {
       const error = await response.json()
-      throw new Error(error.message || 'Failed to finalize order')
+      throw new Error(error.message || 'Lỗi khi hoàn thành đơn hàng')
     }
     const data: ApiResponse<any> = await response.json()
     return data.data
@@ -669,7 +669,7 @@ export const adminService = {
     })
     if (!response.ok) {
       const error = await response.json().catch(() => null)
-      throw new Error((error && error.message) || 'Failed to lock order')
+      throw new Error((error && error.message) || 'Lỗi khi khóa đơn hàng')
     }
     const data: ApiResponse<any> = await response.json()
     return data.data
@@ -693,7 +693,7 @@ export const adminService = {
     })
     if (!response.ok) {
       const error = await response.json().catch(() => null)
-      throw new Error((error && error.message) || 'Failed to release order lock')
+      throw new Error((error && error.message) || 'Lỗi khi mở khóa đơn hàng')
     }
     const data: ApiResponse<any> = await response.json()
     return data.data

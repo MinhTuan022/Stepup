@@ -28,9 +28,6 @@ public class TinhThanh {
     @Column(name = "Loai", columnDefinition = "NVARCHAR(50)")
     private String loai;
 
-    @Column(name = "VungCha", columnDefinition = "NVARCHAR(255)")
-    private String vungCha;
-
     @Column(name = "Phi", precision = 18, scale = 2)
     private BigDecimal phi;
 }

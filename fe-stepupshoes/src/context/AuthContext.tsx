@@ -18,7 +18,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       const response = await authService.login(credentials)
       setUser(response)
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Đã xảy ra lỗi'
+      const message = err instanceof Error ? err.message : 'Đăng nhập thất bại, vui lòng thử lại'
       setError(message)
       throw err
     } finally {

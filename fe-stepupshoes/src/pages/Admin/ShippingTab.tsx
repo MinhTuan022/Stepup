@@ -8,7 +8,6 @@ type Region = {
   tenTinh: string;
   phi?: number;
   loai?: string;
-  vungCha?: string | null;
   moTa?: string | null;
 };
 
@@ -45,7 +44,7 @@ const ShippingTab = () => {
 
   const openCreateForm = () => {
     setEditingRegion(null);
-    setFormData({ maTinh: "", tenTinh: "", phi: 0, loai: "Tỉnh/Thành", vungCha: "", moTa: "" });
+    setFormData({ maTinh: "", tenTinh: "", phi: 0, loai: "Tỉnh/Thành", moTa: "" });
     setShowForm(true);
   };
 
@@ -75,7 +74,6 @@ const ShippingTab = () => {
           tenTinh: formData.tenTinh,
           phi: formData.phi,
           loai: formData.loai,
-          vungCha: formData.vungCha || "",
           moTa: formData.moTa || "",
         });
         showToast("Cập nhật vùng thành công", "success");
@@ -85,7 +83,6 @@ const ShippingTab = () => {
           tenTinh: formData.tenTinh!,
           phi: formData.phi || 0,
           loai: formData.loai || "Tỉnh/Thành",
-          vungCha: formData.vungCha || "",
           moTa: formData.moTa || "",
         });
         showToast("Tạo vùng thành công", "success");
@@ -196,14 +193,6 @@ const ShippingTab = () => {
                       type="text"
                       value={formData.loai || "Tỉnh/Thành"}
                       onChange={(e) => setFormData({ ...formData, loai: e.target.value })}
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label>Vùng cha:</label>
-                    <input
-                      type="text"
-                      value={formData.vungCha || ""}
-                      onChange={(e) => setFormData({ ...formData, vungCha: e.target.value })}
                     />
                   </div>
                 </div>

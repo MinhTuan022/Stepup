@@ -48,3 +48,18 @@
   color: #388e3c;
   text-align: center;
 }
+
+.form-field {
+  display: flex;
+  flex-direction: column;
+}
+
+.form-field .input-error {
+  border-color: #d32f2f;
+}
+
+.field-error {
+  color: #d32f2f;
+  font-size: 0.82rem;
+  margin-top: 0.2rem;
+}
